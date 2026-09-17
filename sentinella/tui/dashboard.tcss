@@ -1,0 +1,217 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Sentinella TUI Dashboard — Textual CSS
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── Global ─────────────────────────────────────────────────────────────── */
+
+Screen {
+    background: $background;
+    color: $foreground;
+}
+
+/* ── Layout grid ────────────────────────────────────────────────────────── */
+
+/* grid-rows must be explicit. Without it every row takes an equal fraction of
+   the height, and since #sentinella-header is only 3 cells tall the rest of its row
+   is dead space — 8 blank cells on a 45-row terminal. Sizing the rows also
+   makes #process-panel's `height: 1fr` mean something: the process list is the
+   panel worth growing, so it takes the slack instead of splitting it evenly
+   with the fixed-content panels. */
+#dashboard {
+    layout: grid;
+    grid-size: 4 5;
+    grid-rows: 3 12 1fr 10 8;
+    grid-gutter: 1;
+    padding: 0 1;
+    height: 1fr;
+}
+
+#dashboard.no-containers {
+    grid-size: 4 4;
+    grid-rows: 3 12 1fr 10;
+}
+
+/* ── Header bar ─────────────────────────────────────────────────────────── */
+
+#sentinella-header {
+    column-span: 4;
+    height: 3;
+    background: $surface;
+    color: $accent;
+    text-align: center;
+    padding: 0 2;
+    border: solid $panel;
+}
+
+/* ── Top row: CPU + Memory ──────────────────────────────────────────────── */
+
+#cpu-panel {
+    column-span: 2;
+    height: auto;
+    min-height: 10;
+    background: $surface;
+    border: solid $panel;
+    padding: 0 1;
+}
+
+#memory-panel {
+    column-span: 2;
+    height: auto;
+    min-height: 10;
+    background: $surface;
+    border: solid $panel;
+    padding: 0 1;
+}
+
+/* ── Middle row: Processes ──────────────────────────────────────────────── */
+
+#process-panel {
+    column-span: 4;
+    height: 1fr;
+    min-height: 12;
+    background: $surface;
+    border: solid $panel;
+    padding: 0 1;
+}
+
+/* ── Bottom row: Disk + Network + Sensors ───────────────────────────────── */
+
+#disk-panel {
+    column-span: 2;
+    height: auto;
+    min-height: 8;
+    background: $surface;
+    border: solid $panel;
+    padding: 0 1;
+}
+
+#network-panel {
+    column-span: 1;
+    height: auto;
+    min-height: 8;
+    background: $surface;
+    border: solid $panel;
+    padding: 0 1;
+}
+
+#sensor-panel {
+    column-span: 1;
+    height: auto;
+    min-height: 8;
+    background: $surface;
+    border: solid $panel;
+    padding: 0 1;
+}
+
+#container-panel {
+    column-span: 4;
+    height: auto;
+    min-height: 6;
+    background: $surface;
+    border: solid $panel;
+    padding: 0 1;
+}
+
+/* ── Widget typography ──────────────────────────────────────────────────── */
+
+.panel-title {
+    color: $accent;
+    text-style: bold;
+    padding: 0 0 0 0;
+}
+
+.metric-label {
+    color: $text-muted;
+}
+
+.metric-value {
+    color: $text;
+    text-style: bold;
+}
+
+.metric-good {
+    color: $success;
+}
+
+.metric-warn {
+    color: $warning;
+}
+
+.metric-crit {
+    color: $error;
+}
+
+/* ── Sparkline colours ──────────────────────────────────────────────────── */
+
+Sparkline {
+    height: 2;
+    margin: 0 0;
+}
+
+Sparkline > .sparkline--max-color {
+    color: $error;
+}
+
+Sparkline > .sparkline--min-color {
+    color: $success;
+}
+
+/* ── ProgressBar ────────────────────────────────────────────────────────── */
+
+ProgressBar {
+    height: 1;
+    padding: 0;
+}
+
+ProgressBar > .bar--bar {
+    color: $accent;
+}
+
+ProgressBar > .bar--complete {
+    color: $success;
+}
+
+/* ── DataTable ──────────────────────────────────────────────────────────── */
+
+DataTable {
+    height: 1fr;
+    scrollbar-size: 1 1;
+}
+
+DataTable > .datatable--header {
+    background: $panel;
+    color: $accent;
+    text-style: bold;
+}
+
+DataTable > .datatable--cursor {
+    background: $panel;
+    color: $text;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+
+Footer {
+    background: $surface;
+    color: $text-muted;
+}
+
+Header {
+    background: $background;
+    color: $accent;
+    dock: top;
+    height: 1;
+}
+
+/* ── Stale data ─────────────────────────────────────────────────────────── */
+
+/* Set while collection is failing. A persistent, quiet marker rather than a
+   toast per refresh tick — it says the same thing without covering the panels,
+   and mirrors the web dashboard's disconnected badge. */
+#dashboard.stale {
+    opacity: 0.85;
+}
+
+#dashboard.stale #sentinella-header {
+    border: solid $warning;
+}

@@ -1,0 +1,964 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Sentinella Web Dashboard — Styles
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── CSS Custom Properties ──────────────────────────────────────────────── */
+:root {
+    --bg-primary: #0a0e17;
+    --bg-card: rgba(20, 27, 45, 0.85);
+    --bg-card-hover: rgba(30, 42, 69, 0.95);
+    --border-color: rgba(30, 42, 69, 0.8);
+    --text-primary: #e6f1ff;
+    --text-secondary: #8892b0;
+    --text-dim: #5a6785;
+    --accent-cyan: #00d2ff;
+    --accent-green: #64ffda;
+    --accent-amber: #ffd93d;
+    --accent-red: #ff6b6b;
+    --accent-purple: #c084fc;
+    /* System stacks: no webfont requests, so the dashboard renders identically
+       on hosts with no internet access. Inter/JetBrains Mono are still used
+       when the viewer happens to have them installed locally. */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+        'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Mono',
+        Menlo, Consolas, 'Liberation Mono', monospace;
+    /* Surfaces layered *over* a card or the page. These were literal
+       rgba(255,255,255,…) / rgba(10,14,23,…) values, which silently assume the
+       ground underneath is dark — so in light mode every track and row tint
+       became white-on-white and the header stayed near-black. Anything painted
+       on top of a themed surface belongs here, not inline. */
+    --header-bg: rgba(10, 14, 23, 0.95);
+    --th-bg: rgba(30, 42, 69, 0.95);
+    --toast-bg: rgba(20, 27, 45, 0.95);
+    --track-bg: rgba(255, 255, 255, 0.06);
+    --row-tint: rgba(255, 255, 255, 0.02);
+    --row-stripe: rgba(255, 255, 255, 0.035);
+    --row-tint-hover: rgba(255, 255, 255, 0.05);
+    --row-border: rgba(255, 255, 255, 0.06);
+    --input-bg: rgba(255, 255, 255, 0.03);
+    --input-bg-focus: rgba(255, 255, 255, 0.05);
+    --shimmer-hi: rgba(255, 255, 255, 0.05);
+    --btn-ghost-hover: rgba(255, 255, 255, 0.08);
+    --card-hover-border: rgba(0, 210, 255, 0.2);
+    --card-hover-shadow: rgba(0, 210, 255, 0.08);
+
+    --radius: 12px;
+    --radius-sm: 8px;
+    --glass-blur: 12px;
+    --transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+body.light-theme {
+    --bg-primary: #f0f4f8;
+    --bg-card: rgba(255, 255, 255, 0.9);
+    --bg-card-hover: rgba(255, 255, 255, 0.95);
+    --border-color: rgba(180, 195, 210, 0.5);
+    --text-primary: #1e293b;
+    --text-secondary: #475569;
+    --text-dim: #64748b;
+    /* Darker than the dark theme's #00d2ff counterpart because this one has to
+       carry small uppercase text (card headings, table headers) on a light
+       ground: #0284c7 only reached 3.4:1 there. */
+    --accent-cyan: #0369a1;
+    --accent-green: #10b981;
+    --accent-amber: #f59e0b;
+    --accent-red: #ef4444;
+    --accent-purple: #8b5cf6;
+    /* Same roles, inverted: dark ink over a light ground. */
+    --header-bg: rgba(255, 255, 255, 0.95);
+    --th-bg: #e6ecf3;
+    --toast-bg: rgba(255, 255, 255, 0.97);
+    --track-bg: rgba(15, 23, 42, 0.10);
+    --row-tint: rgba(15, 23, 42, 0.025);
+    --row-stripe: rgba(15, 23, 42, 0.035);
+    --row-tint-hover: rgba(15, 23, 42, 0.06);
+    --row-border: rgba(15, 23, 42, 0.08);
+    --input-bg: rgba(15, 23, 42, 0.03);
+    --input-bg-focus: rgba(15, 23, 42, 0.05);
+    --shimmer-hi: rgba(15, 23, 42, 0.05);
+    --btn-ghost-hover: rgba(15, 23, 42, 0.06);
+    --card-hover-border: rgba(2, 132, 199, 0.35);
+    --card-hover-shadow: rgba(15, 23, 42, 0.10);
+    background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(2, 132, 199, 0.05) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
+}
+
+/* ── Reset & Base ───────────────────────────────────────────────────────── */
+*, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    /* 87.5% of the user's preferred size, not a hard 14px: the sheet's rem
+       scale was authored against 14px, and a fixed px root silently discards a
+       reader's browser font-size setting (WCAG 1.4.4). A percentage keeps the
+       intended density while still scaling with that preference. */
+    font-size: 87.5%;
+    scroll-behavior: smooth;
+}
+
+body {
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    line-height: 1.5;
+    background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(0, 210, 255, 0.04) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(100, 255, 218, 0.03) 0%, transparent 50%);
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+#main-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.5rem;
+    background: var(--header-bg);
+    border-bottom: 1px solid var(--border-color);
+    backdrop-filter: blur(var(--glass-blur));
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.logo {
+    font-size: 1.5rem;
+}
+
+#main-header h1 {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--accent-cyan);
+    letter-spacing: -0.02em;
+}
+
+.badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.6rem;
+    border-radius: 20px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    background: rgba(255, 107, 107, 0.15);
+    color: var(--accent-red);
+    transition: var(--transition);
+}
+
+.badge.connected {
+    background: rgba(100, 255, 218, 0.15);
+    color: var(--accent-green);
+}
+
+.header-right {
+    display: flex;
+    gap: 1.25rem;
+    align-items: center;
+}
+
+.header-info {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+}
+
+/* ── Dashboard Grid ─────────────────────────────────────────────────────── */
+#dashboard {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    max-width: 1600px;
+    margin: 0 auto;
+}
+
+/* ── Cards ──────────────────────────────────────────────────────────────── */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: var(--transition);
+    backdrop-filter: blur(var(--glass-blur));
+}
+
+.card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--card-hover-border);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px var(--card-hover-shadow);
+}
+
+.card-wide {
+    grid-column: span 4;
+}
+
+#cpu-card,
+#memory-card {
+    grid-column: span 2;
+}
+
+#network-card {
+    grid-column: span 2;
+}
+
+#disk-card {
+    grid-column: span 1;
+}
+
+#sensors-card {
+    grid-column: span 1;
+}
+
+#containers-card {
+    grid-column: span 2;
+}
+
+/* Must stay above the media queries: a media query adds no specificity, so
+   this rule sitting after them (as it used to) won its span back at every
+   width and broke both breakpoints. */
+#users-card {
+    grid-column: span 2;
+}
+
+.card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.card-header h2 {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--accent-cyan);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.card-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+    transition: var(--transition);
+}
+
+.card-body {
+    padding: 0.75rem 1rem;
+}
+
+/* ── Metrics ────────────────────────────────────────────────────────────── */
+.metric-row {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.metric {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.metric .label {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.metric .value {
+    font-size: 0.85rem;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+}
+
+/* ── Progress Bars ──────────────────────────────────────────────────────── */
+.progress-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.progress-label {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    width: 2.5rem;
+    text-transform: uppercase;
+    font-weight: 500;
+}
+
+.progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--track-bg);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent-cyan), var(--accent-green));
+    border-radius: 4px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+    width: 0%;
+}
+
+.progress-fill.swap {
+    background: linear-gradient(90deg, var(--accent-amber), var(--accent-red));
+}
+
+.progress-fill.warn {
+    background: linear-gradient(90deg, var(--accent-amber), var(--accent-red));
+}
+
+/* ── Core Bars ──────────────────────────────────────────────────────────── */
+.core-bars {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 0.35rem;
+    margin-top: 0.5rem;
+}
+
+.core-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.core-bar-label {
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+}
+
+.core-bar-track {
+    height: 4px;
+    background: var(--track-bg);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.core-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+    background: var(--accent-cyan);
+}
+
+/* ── Interface / Partition Lists ────────────────────────────────────────── */
+.interface-list,
+.partition-list,
+.sensor-list,
+.user-list,
+.container-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-top: 0.25rem;
+}
+
+.iface-row,
+.partition-row,
+.sensor-row,
+.user-row,
+.container-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 0.3rem 0.5rem;
+    background: var(--row-tint);
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    transition: var(--transition);
+}
+
+.iface-row:hover,
+.partition-row:hover,
+.sensor-row:hover,
+.container-row:hover {
+    background: var(--row-tint-hover);
+}
+
+.iface-name,
+.partition-mount,
+.sensor-label,
+.container-name {
+    color: var(--text-primary);
+    font-weight: 500;
+    /* Long values (temp-dir mountpoints, verbose sensor labels) must ellipsize
+       rather than overflow the card and collide with the value column.
+       min-width:0 is what actually permits a flex item to shrink and clip. */
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Full value stays available on hover via the title attribute. */
+.partition-usage,
+.partition-size,
+.iface-rate,
+.sensor-value {
+    flex: 0 0 auto;
+}
+
+.iface-rate {
+    color: var(--accent-cyan);
+    font-size: 0.75rem;
+}
+
+.iface-addr {
+    color: var(--text-dim);
+    font-size: 0.7rem;
+}
+
+.partition-usage {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.partition-bar {
+    width: 80px;
+    height: 4px;
+    background: var(--track-bg);
+    border-radius: 2px;
+    overflow: hidden;
+}
+
+.partition-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--accent-cyan);
+    transition: width 0.4s ease;
+}
+
+.partition-pct {
+    font-size: 0.75rem;
+    font-weight: 600;
+    min-width: 3rem;
+    text-align: right;
+}
+
+.partition-size {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+}
+
+.sensor-value {
+    font-weight: 600;
+}
+
+/* Temperature/battery readouts use the shared .metric-* scale — see the
+   "Metric/Sensor States" block below. */
+
+.container-status {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+.status-running {
+    background: rgba(100, 255, 218, 0.12);
+    color: var(--accent-green);
+}
+
+.status-stopped {
+    background: rgba(255, 107, 107, 0.12);
+    color: var(--accent-red);
+}
+
+.container-image {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+}
+
+.container-runtime {
+    font-size: 0.6rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+}
+
+/* ── Process Table ──────────────────────────────────────────────────────── */
+.table-wrapper {
+    max-height: 320px;
+    overflow: auto;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-color) transparent;
+}
+
+.table-wrapper::-webkit-scrollbar {
+    width: 6px;
+}
+
+.table-wrapper::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.table-wrapper::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+#process-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+}
+
+#process-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+}
+
+#process-table th {
+    padding: 0.5rem 0.75rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--accent-cyan);
+    background: var(--th-bg);
+    border-bottom: 1px solid var(--border-color);
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    letter-spacing: 0.05em;
+    user-select: none;
+    transition: var(--transition);
+}
+
+/* "Status" has no data-sort, so it must not advertise a click. */
+#process-table th[data-sort] {
+    cursor: pointer;
+}
+
+#process-table th[data-sort]:hover {
+    color: var(--text-primary);
+}
+
+#process-table td {
+    padding: 0.35rem 0.75rem;
+    border-bottom: 1px solid var(--row-border);
+    color: var(--text-secondary);
+    transition: var(--transition);
+}
+
+#process-table th,
+#process-table td {
+    white-space: nowrap;
+}
+
+#process-table tbody tr:hover td {
+    background: var(--row-tint-hover);
+    color: var(--text-primary);
+}
+
+#process-table tbody tr:nth-child(even) td {
+    background: var(--row-stripe);
+}
+
+/* ── Focus ──────────────────────────────────────────────────────────────────
+   The sortable headers are the only tabbable elements in the dashboard body,
+   and the auth input clears its outline, so without this a keyboard user has
+   nothing to follow. :focus-visible keeps mouse clicks from drawing a ring. */
+#process-table th[data-sort]:focus-visible,
+.theme-toggle-btn:focus-visible,
+.btn-primary:focus-visible,
+#auth-form input:focus-visible,
+.auth-remember input:focus-visible {
+    outline: 2px solid var(--accent-cyan);
+    outline-offset: 2px;
+    border-radius: 3px;
+}
+
+/* ── Charts ─────────────────────────────────────────────────────────────── */
+/* The height is pinned deliberately. Chart.js runs with
+   `maintainAspectRatio: false`, so it sizes the canvas to its parent — and
+   with only a width constraint the canvas and its parent grow off each other
+   on every resize observation, reaching tens of thousands of pixels. */
+canvas {
+    width: 100% !important;
+    height: 120px !important;
+    max-height: 120px;
+    margin-bottom: 0.5rem;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+#main-footer {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.5rem 1.5rem;
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    border-top: 1px solid var(--border-color);
+}
+
+/* ── Animations ─────────────────────────────────────────────────────────── */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+    animation: fadeIn 0.5s ease forwards;
+}
+
+.card:nth-child(2) { animation-delay: 0.05s; }
+.card:nth-child(3) { animation-delay: 0.10s; }
+.card:nth-child(4) { animation-delay: 0.15s; }
+.card:nth-child(5) { animation-delay: 0.20s; }
+.card:nth-child(6) { animation-delay: 0.25s; }
+.card:nth-child(7) { animation-delay: 0.30s; }
+.card:nth-child(8) { animation-delay: 0.35s; }
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+    #dashboard {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .card-wide { grid-column: span 2; }
+    #cpu-card,
+    #memory-card,
+    #network-card,
+    #containers-card {
+        grid-column: span 2;
+    }
+    #disk-card,
+    #sensors-card,
+    #users-card {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 640px) {
+    #dashboard {
+        grid-template-columns: 1fr;
+    }
+    .card, .card-wide, #cpu-card, #memory-card, #network-card, #containers-card,
+    #users-card, #disk-card, #sensors-card {
+        grid-column: span 1;
+    }
+    #main-header {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .header-right {
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+}
+
+/* ── Metric/Sensor States (reusable) ── */
+.metric-ok { color: var(--accent-green); }
+.metric-warn { color: var(--accent-amber); }
+.metric-crit { color: var(--accent-red); }
+
+.bg-ok { background: var(--accent-green) !important; }
+.bg-warn { background: var(--accent-amber) !important; }
+.bg-crit { background: var(--accent-red) !important; }
+
+/* ── Section header for sensors panel ── */
+.sensor-section-header {
+    font-size: 0.7rem;
+    color: var(--accent-cyan);
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-top: 0.5rem;
+    margin-bottom: 0.3rem;
+}
+.sensor-section-header:first-child {
+    margin-top: 0;
+}
+
+/* ── Connection toast and dimming ── */
+body.disconnected #dashboard {
+    /* Only a light dim. The values are stale, not meaningless, and this is
+       exactly when someone is squinting at them — 0.65 dropped every label
+       below its contrast floor. The badge and toast carry the actual status. */
+    opacity: 0.85;
+    transition: opacity 0.3s ease;
+}
+body.disconnected::after {
+    content: "Connection lost. Reconnecting...";
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: var(--toast-bg);
+    border: 1px solid var(--accent-red);
+    color: var(--accent-red);
+    padding: 0.75rem 1.25rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    box-shadow: 0 4px 20px rgba(255, 107, 107, 0.15);
+    z-index: 1000;
+    pointer-events: none;
+    animation: pulse 1.5s infinite ease-in-out;
+}
+
+/* ── Loading skeletons/shimmer ── */
+body.loading .card-value,
+body.loading .value,
+body.loading .core-bars,
+body.loading tbody,
+body.loading .partition-list,
+body.loading .interface-list,
+body.loading .sensor-list,
+body.loading .user-list,
+body.loading .container-list {
+    color: transparent !important;
+    background: linear-gradient(90deg, var(--border-color) 25%, var(--shimmer-hi) 50%, var(--border-color) 75%) !important;
+    background-size: 200% 100% !important;
+    animation: loading-pulse 1.5s infinite !important;
+    border-radius: 4px;
+}
+@keyframes loading-pulse {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ── Theme Toggle Button ────────────────────────────────────────────────── */
+.theme-toggle-btn {
+    background: none;
+    border: none;
+    font-size: 1.25rem;
+    cursor: pointer;
+    padding: 0.4rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    color: var(--text-secondary);
+    user-select: none;
+}
+
+.theme-toggle-btn:hover {
+    background: var(--btn-ghost-hover);
+    color: var(--accent-cyan);
+    transform: scale(1.1) rotate(15deg);
+}
+
+body.light-theme .theme-toggle-btn:hover {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+/* ── Auth Modal Overlay ── */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(10, 14, 23, 0.85);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    transition: var(--transition);
+}
+
+.modal-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 2.5rem 2rem;
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.4s ease;
+    backdrop-filter: blur(var(--glass-blur));
+}
+
+.modal-logo {
+    font-size: 3rem;
+    display: block;
+    margin-bottom: 1rem;
+}
+
+.modal-content h2 {
+    color: var(--accent-cyan);
+    font-size: 1.35rem;
+    margin-bottom: 0.5rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+}
+
+.modal-content p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+}
+
+#auth-form input[type="password"] {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    margin-bottom: 1.5rem;
+    outline: none;
+    transition: var(--transition);
+}
+
+#auth-form input[type="password"]:focus {
+    border-color: var(--accent-cyan);
+    background: var(--input-bg-focus);
+    box-shadow: 0 0 10px var(--card-hover-border);
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+    color: #0a0e17;
+    font-weight: 700;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    width: 100%;
+    font-size: 0.95rem;
+    transition: var(--transition);
+}
+
+.btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(0, 210, 255, 0.3);
+}
+
+body.light-theme .modal-overlay {
+    background: rgba(240, 244, 248, 0.85);
+}
+
+body.light-theme .btn-primary {
+    color: #ffffff;
+}
+
+
+
+/* ── Disabled modules ──────────────────────────────────────────────────────
+   A module turned off in sentinella.toml must read as "not monitored" rather than
+   as a genuine zero. */
+.card.module-disabled .card-body {
+    opacity: 0.35;
+    filter: grayscale(1);
+    pointer-events: none;
+}
+
+.card.module-disabled .card-header::after {
+    content: "not monitored";
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    color: var(--text-dim);
+    border: 1px solid var(--text-dim);
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+    margin-left: auto;
+}
+
+.card.module-disabled .card-value {
+    visibility: hidden;
+}
+
+/* ── Truncation notice + empty states ─────────────────────────────────────
+   A capped list has to say it was capped, or the card reads as the whole
+   picture. Mirrors the TUI's "+N more" row. */
+.more-note,
+.empty-note {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    padding: 0.3rem 0.5rem;
+}
+
+.card.runtime-unavailable .card-value {
+    visibility: hidden;
+}
+
+/* ── Reduced motion ───────────────────────────────────────────────────────*/
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ── Auth modal feedback ──────────────────────────────────────────────────*/
+.auth-error {
+    color: var(--accent-red);
+    font-size: 0.8rem;
+    margin: 0 0 0.75rem;
+    text-align: left;
+}
+
+.auth-remember {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin: 0.5rem 0 0.75rem;
+    cursor: pointer;
+}
+
+.auth-remember input {
+    accent-color: var(--accent-cyan, #00d2ff);
+    cursor: pointer;
+}
+
+/* Appears beside the status badge once the reconnect budget is spent. Telling
+   someone to reload the page is a dead end when a click will do. */
+.retry-btn {
+    margin-left: 0.5rem;
+    padding: 0.15rem 0.6rem;
+    font-family: var(--font-sans);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background var(--transition);
+}
+
+.retry-btn:hover {
+    background: var(--btn-ghost-hover);
+}
+
+.retry-btn:focus-visible {
+    outline: 2px solid var(--accent-cyan);
+    outline-offset: 2px;
+}

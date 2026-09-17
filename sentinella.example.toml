@@ -1,0 +1,36 @@
+# Sentinella default configuration
+# Copy to ./sentinella.toml or ~/.config/sentinella/sentinella.toml and customise.
+
+[general]
+refresh_interval = 2        # seconds between updates (fractional allowed)
+theme = "dark"              # "dark" | "light"
+
+[modules]
+cpu = true
+memory = true
+disk = true
+network = true
+processes = true
+users = true
+sensors = true
+containers = true
+container_stats = false     # per-container CPU/memory (one Docker API call each)
+
+[web]
+enabled = false
+host = "127.0.0.1"
+port = 8080
+api_key = ""                # empty = no authentication
+
+[remote]
+enabled = false
+host = "127.0.0.1"
+port = 9090
+api_key = ""
+
+[export]
+format = "text"             # text | csv | json
+
+[processes]
+max_display = 25
+sort_by = "cpu"             # cpu | memory | pid | name

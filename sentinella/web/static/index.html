@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="no-referrer">
+    <meta name="description" content="Sentinella System Monitor — real-time cross-platform system monitoring dashboard">
+    <title>🐦‍⬛ Sentinella — System Monitor</title>
+    <!-- No external requests: Sentinella often runs on hosts with no internet
+         access, and a CDN would be able to execute script in this origin.
+         Chart.js is vendored; fonts fall back to the system UI stack. -->
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🐦‍⬛</text></svg>">
+    <script src="/static/vendor/chart.umd.min.js"></script>
+</head>
+<body class="loading disconnected">
+    <!-- Must stay first in <body>: applies the saved theme before paint. -->
+    <script src="/static/theme-init.js"></script>
+    <!-- Header -->
+    <header id="main-header">
+        <div class="header-left">
+            <span class="logo">🐦‍⬛</span>
+            <h1>Sentinella</h1>
+            <span class="badge" id="status-badge" role="status" aria-live="polite">Connecting…</span>
+        </div>
+        <div class="header-right">
+            <button id="theme-toggle" class="theme-toggle-btn" aria-label="Toggle Theme">🌓</button>
+            <span id="hostname" class="header-info"></span>
+            <span id="os-info" class="header-info"></span>
+            <span id="uptime" class="header-info"></span>
+            <span id="clock" class="header-info"></span>
+        </div>
+    </header>
+
+    <!-- Dashboard Grid -->
+    <main id="dashboard">
+        <!-- CPU Card -->
+        <section class="card" id="cpu-card">
+            <div class="card-header">
+                <h2>CPU</h2>
+                <span class="card-value" id="cpu-overall">—%</span>
+            </div>
+            <div class="card-body">
+                <canvas id="cpu-chart" height="120"></canvas>
+                <div class="metric-row" id="cpu-details">
+                    <div class="metric"><span class="label">Cores</span><span class="value" id="cpu-cores">—</span></div>
+                    <div class="metric"><span class="label">Freq</span><span class="value" id="cpu-freq">—</span></div>
+                    <div class="metric"><span class="label">Load</span><span class="value" id="cpu-load">—</span></div>
+                </div>
+                <div id="cpu-core-bars" class="core-bars"></div>
+            </div>
+        </section>
+
+        <!-- Memory Card -->
+        <section class="card" id="memory-card">
+            <div class="card-header">
+                <h2>Memory</h2>
+                <span class="card-value" id="mem-overall">—%</span>
+            </div>
+            <div class="card-body">
+                <canvas id="mem-chart" height="120"></canvas>
+                <div class="metric-row">
+                    <div class="metric"><span class="label">Used</span><span class="value" id="mem-used">—</span></div>
+                    <div class="metric"><span class="label">Total</span><span class="value" id="mem-total">—</span></div>
+                    <div class="metric"><span class="label">Available</span><span class="value" id="mem-avail">—</span></div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-label">RAM</div>
+                    <div class="progress-bar"><div class="progress-fill" id="ram-bar"></div></div>
+                </div>
+                <div class="progress-container">
+                    <div class="progress-label">Swap</div>
+                    <div class="progress-bar"><div class="progress-fill swap" id="swap-bar"></div></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Network Card -->
+        <section class="card" id="network-card">
+            <div class="card-header">
+                <h2>Network</h2>
+                <span class="card-value" id="net-connections">— conn</span>
+            </div>
+            <div class="card-body">
+                <canvas id="net-chart" height="120"></canvas>
+                <div id="net-interfaces" class="interface-list"></div>
+                <div class="more-note" id="net-interfaces-more" hidden></div>
+            </div>
+        </section>
+
+        <!-- Disk Card -->
+        <section class="card" id="disk-card">
+            <div class="card-header">
+                <h2>Disk</h2>
+            </div>
+            <div class="card-body">
+                <div id="disk-partitions" class="partition-list"></div>
+                <div class="more-note" id="disk-partitions-more" hidden></div>
+                <div class="metric-row" id="disk-io">
+                    <div class="metric"><span class="label">Read</span><span class="value" id="disk-read">—</span></div>
+                    <div class="metric"><span class="label">Write</span><span class="value" id="disk-write">—</span></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Sensors Card -->
+        <section class="card" id="sensors-card">
+            <div class="card-header">
+                <h2>Sensors</h2>
+            </div>
+            <div class="card-body">
+                <div id="temp-list" class="sensor-list"></div>
+                <div class="more-note" id="temp-list-more" hidden></div>
+                <div id="fan-list" class="sensor-list"></div>
+                <div class="more-note" id="fan-list-more" hidden></div>
+                <div id="battery-info" class="sensor-list"></div>
+            </div>
+        </section>
+
+        <!-- Users Card -->
+        <section class="card" id="users-card">
+            <div class="card-header">
+                <h2>Users</h2>
+                <span class="card-value" id="user-count">—</span>
+            </div>
+            <div class="card-body">
+                <div id="user-list" class="user-list"></div>
+                <div class="more-note" id="user-list-more" hidden></div>
+            </div>
+        </section>
+
+        <!-- Containers Card -->
+        <section class="card" id="containers-card">
+            <div class="card-header">
+                <h2>Containers</h2>
+                <span class="card-value" id="container-count">—</span>
+            </div>
+            <div class="card-body">
+                <div id="container-list" class="container-list"></div>
+                <div class="more-note" id="container-list-more" hidden></div>
+            </div>
+        </section>
+
+        <!-- Process Table -->
+        <section class="card card-wide" id="process-card">
+            <div class="card-header">
+                <h2>Processes</h2>
+                <span class="card-value" id="proc-count">— processes</span>
+            </div>
+            <div class="card-body">
+                <div class="table-wrapper">
+                    <table id="process-table">
+                        <thead>
+                            <tr>
+                                <th data-sort="pid" tabindex="0" role="button" aria-label="Sort by PID">PID</th>
+                                <th data-sort="name" tabindex="0" role="button" aria-label="Sort by Name">Name</th>
+                                <th data-sort="user" tabindex="0" role="button" aria-label="Sort by User">User</th>
+                                <th data-sort="cpu" tabindex="0" role="button" aria-label="Sort by CPU Percent">CPU%</th>
+                                <th data-sort="memory" tabindex="0" role="button" aria-label="Sort by Memory Percent">MEM%</th>
+                                <th data-sort="rss" tabindex="0" role="button" aria-label="Sort by Resident Memory">RSS</th>
+                                <th data-sort="threads" tabindex="0" role="button" aria-label="Sort by Thread Count">Threads</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="process-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="more-note" id="process-note" hidden></div>
+            </div>
+        </section>
+    </main>
+
+    <footer id="main-footer">
+        <span>🐦‍⬛ Sentinella <span id="app-version"></span></span>
+        <span id="last-update" aria-live="polite">Last update: —</span>
+    </footer>
+
+    <!-- Auth Modal -->
+    <div id="auth-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
+            <span class="modal-logo">🐦‍⬛</span>
+            <h2 id="auth-modal-title">Authentication Required</h2>
+            <p>Please enter the API key to connect to the Sentinella agent.</p>
+            <p id="auth-error" class="auth-error" role="alert" style="display: none;"></p>
+            <form id="auth-form">
+                <input type="password" id="auth-key-input" placeholder="API Key" required autofocus>
+                <label class="auth-remember">
+                    <input type="checkbox" id="auth-remember">
+                    Remember on this device
+                </label>
+                <button type="submit" class="btn-primary">Connect</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Pure helpers, shared with the unit tests. Must precede app.js, which
+         reads them off window.SentinellaLib. -->
+    <script src="/static/lib.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>

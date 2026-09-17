@@ -1,0 +1,132 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments & uv
+.venv/
+venv/
+env/
+.venv*/
+venv*/
+env*/
+ENV/
+env.bak/
+venv.bak/
+.venv-formula/
+.venv-poet/
+.python-version
+.uv/
+.uv-cache/
+
+# Environment variables & secrets
+.env
+.env.*
+.env.local
+.env.development
+.env.test
+.env.production
+.env.*.local
+*.env
+!.env.example
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Type checking & Linting
+.ruff_cache/
+.mypy_cache/
+.pyre/
+.pytype/
+
+# Node (web dashboard tests only — the Python package is the deliverable)
+node_modules/
+.vitest/
+coverage/
+
+# Databases & Logs
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Documentation
+site/
+
+# Project-specific / Sentinella
+sentinella_monitor.egg-info/
+!sentinella.example.toml
+
+# IDEs and Editors
+.idea/
+.vscode/
+.zed/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+.project
+.pydevproject
+.settings/
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# AI Tools & Agents
+.openai/
+.chatgpt/
+gpt-config.json
+openai.config.json
+.anthropic/
+.claude/
+claude.config.json
+claude-settings.json
+.prompts/
+.prompt-cache/
+.ai/
+.gemini/
+.antigravity/
+.antigravitycli/
+.copilot/
+.codex/
+.cagent/
+.cursor/
+.windsurf/
+.cline/
+CLAUDE.md

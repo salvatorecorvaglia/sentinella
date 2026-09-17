@@ -1,0 +1,15 @@
+{
+  "name": "sentinella-web-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Unit tests for the Sentinella web dashboard's client-side logic. The Python package is the project; this exists only so sentinella/web/static has a test runner.",
+  "type": "commonjs",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1",
+    "vitest": "^5.0.0"
+  }
+}

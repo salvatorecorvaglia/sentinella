@@ -41,7 +41,7 @@ CSS_PATH = Path(__file__).parent / "dashboard.tcss"
 class SentinellaApp(App):
     """Sentinella system monitor TUI application."""
 
-    TITLE = "🐦‍⬛ Sentinella System Monitor"
+    TITLE = "🔔 Sentinella System Monitor"
     CSS_PATH = CSS_PATH
 
     BINDINGS = [

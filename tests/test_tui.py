@@ -7,7 +7,7 @@ from sentinella.tui.app import SentinellaApp
 async def test_tui_app_mount(mock_config, mock_collector):
     app = SentinellaApp(collector=mock_collector, config=mock_config)
     async with app.run_test():
-        assert app.title == "🐦‍⬛ Sentinella System Monitor"
+        assert app.title == "🔔 Sentinella System Monitor"
         # Verify that all panel widgets exist
         assert app.query_one("#cpu-panel") is not None
         assert app.query_one("#memory-panel") is not None

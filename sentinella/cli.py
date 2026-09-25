@@ -285,7 +285,7 @@ def _cmd_web(args: argparse.Namespace, config: SentinellaConfig) -> None:
     validate_config(config)
 
     app = create_app(config)
-    print(f"🐦‍⬛ Sentinella web dashboard → http://{config.web.host}:{config.web.port}")
+    print(f"🔔 Sentinella web dashboard → http://{config.web.host}:{config.web.port}")
     uvicorn.run(app, host=config.web.host, port=config.web.port, log_level="info")
 
 
@@ -300,7 +300,7 @@ def _cmd_serve(args: argparse.Namespace, config: SentinellaConfig) -> None:
     validate_config(config)
 
     app = create_remote_app(config)
-    print(f"🐦‍⬛ Sentinella remote agent → http://{config.remote.host}:{config.remote.port}")
+    print(f"🔔 Sentinella remote agent → http://{config.remote.host}:{config.remote.port}")
     uvicorn.run(app, host=config.remote.host, port=config.remote.port, log_level="info")
 
 

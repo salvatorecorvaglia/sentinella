@@ -1,4 +1,4 @@
-# Contributing to Sentinella 🐦‍⬛
+# Contributing to Sentinella 🔔
 
 Thank you for your interest in contributing to **Sentinella**! We welcome contributions, bug reports, feature requests, and security improvements from the community.
 
@@ -139,4 +139,4 @@ When you are ready to submit your changes, please follow these steps:
 
 ---
 
-Happy coding! 🐦‍⬛
+Happy coding! 🔔

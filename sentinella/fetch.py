@@ -189,7 +189,7 @@ def run_fetch(config: SentinellaConfig | None = None, collector: Any = None) -> 
     console.print(
         Panel(
             output,
-            title="[bold bright_white]🐦‍⬛ SENTINELLA[/bold bright_white]",
+            title="[bold bright_white]🔔 SENTINELLA[/bold bright_white]",
             border_style="cyan",
             padding=(1, 2),
         )

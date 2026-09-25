@@ -23,7 +23,7 @@ class HeaderWidget(Static):
         text = Text()
         # Was `bold bright_white`, which sat at 1.44:1 on the light theme's
         # #D8D8D8 surface — effectively invisible.
-        text.append("  🐦‍⬛ SENTINELLA", style=f"bold {palette.value}")
+        text.append("  🔔 SENTINELLA", style=f"bold {palette.value}")
         text.append("  │  ", style=palette.muted)
         text.append(f"{si.hostname}", style=f"bold {palette.title}")
         text.append(f"  │  {si.os_name} {si.os_version} ({si.architecture})", style=palette.value)

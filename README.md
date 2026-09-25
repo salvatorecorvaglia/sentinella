@@ -1,4 +1,4 @@
-# Sentinella 🐦‍⬛
+# Sentinella �
 
 **Cross-platform system monitor with TUI, web dashboard, and remote monitoring**
 

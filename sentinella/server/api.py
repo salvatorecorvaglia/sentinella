@@ -11,7 +11,6 @@ import asyncio
 import hmac
 import ipaddress
 import logging
-import secrets
 import sys
 import time
 import urllib.parse
@@ -34,9 +33,6 @@ from sentinella.core.utils import PERCENT_THRESHOLDS, TEMP_THRESHOLDS, serialize
 from sentinella.server.broadcast import MAX_WEBSOCKET_CLIENTS, BroadcastHub
 
 log = logging.getLogger(__name__)
-
-# Ephemeral key for API-key comparison only; no authentication hashes are stored.
-_KEY_COMPARISON_SECRET = secrets.token_bytes(32)
 
 # Module names valid for individual endpoints
 VALID_MODULES = MODULE_NAMES
@@ -240,14 +236,19 @@ def keys_match(candidate: str, expected: str) -> bool:
 
     ``hmac.compare_digest`` raises ``TypeError`` when given ``str`` arguments
     containing non-ASCII characters, so both sides are encoded to UTF-8 first.
-    Comparing HMAC-SHA-256 digests with a random process-local secret keeps the
-    comparison inputs the same length without creating unkeyed hashes of API
-    keys. These digests are ephemeral comparison values, not password storage.
+    Pad both byte strings to the same length to avoid a length mismatch in
+    ``compare_digest``. Check the original lengths too, so trailing NUL bytes
+    cannot make different keys match. Encoding and padding depend on length;
+    the byte comparison does not short-circuit based on key contents.
     """
-    return hmac.compare_digest(
-        hmac.digest(_KEY_COMPARISON_SECRET, candidate.encode("utf-8"), "sha256"),
-        hmac.digest(_KEY_COMPARISON_SECRET, expected.encode("utf-8"), "sha256"),
+    candidate_bytes = candidate.encode("utf-8")
+    expected_bytes = expected.encode("utf-8")
+    comparison_length = max(len(candidate_bytes), len(expected_bytes))
+    contents_match = hmac.compare_digest(
+        candidate_bytes.ljust(comparison_length, b"\x00"),
+        expected_bytes.ljust(comparison_length, b"\x00"),
     )
+    return contents_match & (len(candidate_bytes) == len(expected_bytes))
 
 
 def create_base_app(

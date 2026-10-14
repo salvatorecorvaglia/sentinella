@@ -431,6 +431,11 @@ def test_key_comparison_does_not_depend_on_length():
         ("ключ🔑", "ключ🔑", True),
         ("ключ🔑", "ключ🔒", False),
         ("secret\x00", "secret", False),
+        ("secret", "secret\x00", False),
+        ("", "", True),
+        ("", "\x00", False),
+        ("\x00", "", False),
+        ("secret\x00", "secret\x00", True),
     ],
 )
 def test_key_comparison_preserves_exact_match(candidate, expected, matches):

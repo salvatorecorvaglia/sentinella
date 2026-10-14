@@ -8,10 +8,10 @@ with API key middleware, snapshot endpoints, and WebSocket streaming.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import hmac
 import ipaddress
 import logging
+import secrets
 import sys
 import time
 import urllib.parse
@@ -34,6 +34,9 @@ from sentinella.core.utils import PERCENT_THRESHOLDS, TEMP_THRESHOLDS, serialize
 from sentinella.server.broadcast import MAX_WEBSOCKET_CLIENTS, BroadcastHub
 
 log = logging.getLogger(__name__)
+
+# Ephemeral key for API-key comparison only; no authentication hashes are stored.
+_KEY_COMPARISON_SECRET = secrets.token_bytes(32)
 
 # Module names valid for individual endpoints
 VALID_MODULES = MODULE_NAMES
@@ -237,12 +240,13 @@ def keys_match(candidate: str, expected: str) -> bool:
 
     ``hmac.compare_digest`` raises ``TypeError`` when given ``str`` arguments
     containing non-ASCII characters, so both sides are encoded to UTF-8 first.
-    Comparing SHA-256 digests rather than the keys themselves keeps the inputs
-    the same length, so the timing can't reveal how long the key is either.
+    Comparing HMAC-SHA-256 digests with a random process-local secret keeps the
+    comparison inputs the same length without creating unkeyed hashes of API
+    keys. These digests are ephemeral comparison values, not password storage.
     """
     return hmac.compare_digest(
-        hashlib.sha256(candidate.encode("utf-8")).digest(),
-        hashlib.sha256(expected.encode("utf-8")).digest(),
+        hmac.digest(_KEY_COMPARISON_SECRET, candidate.encode("utf-8"), "sha256"),
+        hmac.digest(_KEY_COMPARISON_SECRET, expected.encode("utf-8"), "sha256"),
     )
 
 

@@ -422,6 +422,22 @@ def test_key_comparison_does_not_depend_on_length():
 
 
 @pytest.mark.parametrize(
+    ("candidate", "expected", "matches"),
+    [
+        ("secret", "secret", True),
+        ("secret", "secreu", False),
+        ("", "secret", False),
+        ("secret", "", False),
+        ("ключ🔑", "ключ🔑", True),
+        ("ключ🔑", "ключ🔒", False),
+        ("secret\x00", "secret", False),
+    ],
+)
+def test_key_comparison_preserves_exact_match(candidate, expected, matches):
+    assert keys_match(candidate, expected) is matches
+
+
+@pytest.mark.parametrize(
     ("origin", "host", "ok"),
     [
         ("http://localhost:8080", "localhost:8080", True),

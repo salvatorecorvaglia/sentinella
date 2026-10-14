@@ -1,5 +1,13 @@
+import asyncio
+from unittest.mock import patch
+
 import pytest
 
+from sentinella.config import (
+    SentinellaConfig,
+)
+from sentinella.core.models import SystemSnapshot
+from sentinella.remote.client import RemoteCollector
 from sentinella.tui.app import SentinellaApp
 
 
@@ -72,8 +80,7 @@ async def test_reconcile_process_sort_is_noop_on_configured_default_sort(
     mock_config, dummy_snapshot, mock_collector
 ):
     """No override call when the active sort already matches the plugin's
-    truncation key — MockMetricCollector doesn't even implement
-    collect_processes_async, so this also covers collectors that can't."""
+    truncation key."""
     app = SentinellaApp(collector=mock_collector, config=mock_config)
     reconciled = await app._reconcile_process_sort(dummy_snapshot)
     assert reconciled is dummy_snapshot
@@ -154,3 +161,237 @@ async def test_widget_colors_follow_the_theme(mock_config, mock_collector, dummy
     assert seen["dark"] != seen["light"]
     # The value role tracks the theme foreground, so it must invert.
     assert seen["dark"].value != seen["light"].value
+
+
+@pytest.mark.asyncio
+async def test_reconcile_keeps_the_snapshot_when_the_collector_cannot_rerank(
+    mock_config, dummy_snapshot, mock_collector
+):
+    """A remote agent can't re-collect with another sort key; its
+    collect_processes_async says so with None and the snapshot stands."""
+    app = SentinellaApp(collector=mock_collector, config=mock_config)
+    app._sort_index = 1  # "memory", not the configured "cpu"
+    reconciled = await app._reconcile_process_sort(dummy_snapshot)
+    assert reconciled is dummy_snapshot
+
+
+def test_both_collectors_implement_the_optional_capabilities():
+
+    remote = RemoteCollector("127.0.0.1:9")
+    try:
+        remote.set_collect_cmdline(True)  # the agent decides; a no-op here
+        assert asyncio.run(remote.collect_processes_async("memory")) is None
+    finally:
+        remote.close()
+
+
+@pytest.mark.asyncio
+async def test_panels_take_their_background_from_the_theme(mock_config, mock_collector):
+    """The stylesheet paints panels with $surface; a hardcoded colour would
+    stay put when the theme changes and defeat general.theme."""
+    from textual.color import Color
+
+    backgrounds = {}
+    for theme in ("dark", "light"):
+        mock_config.general.theme = theme
+        app = SentinellaApp(collector=mock_collector, config=mock_config)
+        async with app.run_test(size=(140, 45)):
+            surface = Color.parse(app.get_css_variables()["surface"])
+            for panel_id in (
+                "#sentinella-header",
+                "#cpu-panel",
+                "#memory-panel",
+                "#process-panel",
+                "#disk-panel",
+                "#network-panel",
+                "#sensor-panel",
+                "#container-panel",
+            ):
+                assert app.query_one(panel_id).styles.background == surface, (theme, panel_id)
+            backgrounds[theme] = surface
+    assert backgrounds["dark"] != backgrounds["light"]
+
+
+# ── P2-7: NetworkWidget must not accumulate interfaces forever ───────────────
+
+
+def test_network_widget_prunes_interfaces_no_longer_present():
+    from sentinella.core.models import NetworkInterface, NetworkMetrics
+    from sentinella.tui.widgets.network_widget import NetworkWidget
+
+    def snap_with(names):
+        return type(
+            "S",
+            (),
+            {
+                "network": NetworkMetrics(
+                    interfaces=[
+                        NetworkInterface(name=n, bytes_sent=100, bytes_recv=100) for n in names
+                    ],
+                    connections_count=0,
+                )
+            },
+        )()
+
+    widget = NetworkWidget()
+    with patch.object(type(widget), "update", lambda self, t: None):
+        widget.update_data(snap_with(["eth0", "wg0"]))
+        assert set(widget._prev_sent) == {"eth0", "wg0"}
+
+        widget.update_data(snap_with(["eth0"]))  # wg0 (VPN) disconnected
+        assert set(widget._prev_sent) == {"eth0"}
+        assert set(widget._prev_recv) == {"eth0"}
+
+
+# ── Phase 3 (R5): the palette cache must not leak across apps ──────────────
+
+
+def test_theme_cache_is_scoped_per_app():
+    from sentinella.tui import theme as theme_mod
+
+    class FakeApp:
+        theme = "textual-dark"
+
+        def get_css_variables(self):
+            return {
+                "text-primary": "#111111",
+                "foreground": "#222222",
+                "surface": "#333333",
+                "text-success": "#444444",
+                "text-warning": "#555555",
+                "text-error": "#666666",
+            }
+
+    class Widget:
+        def __init__(self, app):
+            self.app = app
+
+    app_a, app_b = FakeApp(), FakeApp()
+    pal_a = theme_mod.palette_for(Widget(app_a))
+    pal_b = theme_mod.palette_for(Widget(app_b))
+    assert pal_a == pal_b  # same theme resolves the same
+    # ...but cached separately, so one app's entry cannot outlive it.
+    assert theme_mod._cache[app_a] is not theme_mod._cache[app_b]
+
+
+# ── Phase 6 (U1): a persistent failure must notify once, not every tick ─────
+
+
+@pytest.mark.asyncio
+async def test_collection_failure_notifies_once_not_every_tick(mock_config):
+    """A remote agent that is down produced one toast per refresh_interval,
+    indefinitely, burying the dashboard it was describing."""
+    from sentinella.tui.app import SentinellaApp
+
+    class AlwaysFailing:
+        async def collect_async(self):
+            raise ConnectionError("agent is down")
+
+        def collect(self):
+            raise ConnectionError("agent is down")
+
+        def close(self):
+            pass
+
+        async def close_async(self):
+            pass
+
+    app = SentinellaApp(collector=AlwaysFailing(), config=mock_config)
+    notifications = []
+    app.notify = lambda msg, **kw: notifications.append(msg)  # type: ignore[method-assign]
+    async with app.run_test():
+        # on_mount fires its own tick; start counting from a known state.
+        notifications.clear()
+        app._collection_failing = False
+        for _ in range(5):
+            await app._async_tick()
+
+    assert len(notifications) == 1, f"one toast per tick: {notifications}"
+    assert app._collection_failing is True
+
+
+@pytest.mark.asyncio
+async def test_recovery_is_announced_once(mock_config, dummy_snapshot):
+    from sentinella.tui.app import SentinellaApp
+
+    class Flaky:
+        def __init__(self):
+            self.fail = True
+
+        async def collect_async(self):
+            if self.fail:
+                raise ConnectionError("down")
+            return dummy_snapshot
+
+        def collect(self):
+            return dummy_snapshot
+
+        def close(self):
+            pass
+
+        async def close_async(self):
+            pass
+
+    collector = Flaky()
+    app = SentinellaApp(collector=collector, config=mock_config)
+    notifications = []
+    app.notify = lambda msg, **kw: notifications.append(msg)  # type: ignore[method-assign]
+    async with app.run_test():
+        notifications.clear()
+        app._collection_failing = False
+        await app._async_tick()
+        await app._async_tick()
+        collector.fail = False
+        await app._async_tick()
+        await app._async_tick()
+
+    assert len(notifications) == 2, notifications
+    assert "failed" in notifications[0].lower()
+    assert "recovered" in notifications[1].lower()
+    assert app._collection_failing is False
+
+
+# ── Phase 6 (U3): the TUI gets the runtime theme toggle the web already had ──
+
+
+@pytest.mark.asyncio
+async def test_tui_theme_toggle_flips_and_repaints(mock_config, mock_collector):
+    from sentinella.tui.app import SentinellaApp
+
+    app = SentinellaApp(collector=mock_collector, config=mock_config)
+    async with app.run_test() as pilot:
+        assert app.theme == "textual-dark"
+        await pilot.press("t")
+        assert app.theme == "textual-light"
+        await pilot.press("t")
+        assert app.theme == "textual-dark"
+
+
+# ── Phase 6: one definition of "this container is running" ──────────────────
+
+
+def test_every_surface_counts_all_running_spellings(capsys, make_collector):
+    """Docker says "running", LXC "Running", some runtimes "Up". A surface
+    that tested status == "running" itself would undercount the others."""
+    from sentinella.core.models import ContainerInfo, ContainerMetrics
+    from sentinella.fetch import run_fetch
+    from sentinella.tui.widgets.container_widget import ContainerWidget
+
+    snap = SystemSnapshot(
+        containers=ContainerMetrics(
+            containers=[
+                ContainerInfo(name="a", status="Up", runtime="docker"),
+                ContainerInfo(name="b", status="Running", runtime="docker"),
+                ContainerInfo(name="c", status="exited", runtime="docker"),
+            ],
+            docker_available=True,
+        )
+    )
+    run_fetch(SentinellaConfig(), collector=make_collector(snap))
+    assert "2 running" in capsys.readouterr().out
+
+    widget = ContainerWidget()
+    captured = {}
+    with patch.object(ContainerWidget, "update", lambda self, t: captured.setdefault("t", t)):
+        widget.update_data(snap)
+    assert "2/3 running" in captured["t"].plain

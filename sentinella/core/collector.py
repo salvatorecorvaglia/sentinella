@@ -12,7 +12,7 @@ import logging
 import threading
 import time
 import weakref
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from typing import Any
 
 from sentinella.config import SentinellaConfig, load_config
@@ -53,6 +53,20 @@ def _register_for_shutdown(collector: Collector) -> None:
     _LIVE_COLLECTORS.add(collector)
 
 
+# Calls that were still running when their collector was closed. close() no
+# longer waits for them, but interpreter shutdown joins every executor thread,
+# so the CLI checks this list and does not let a stuck call hold up exiting.
+_ABANDONED: list[Future] = []
+_ABANDONED_LOCK = threading.Lock()
+
+
+def abandoned_calls() -> list[Future]:
+    """Calls left running by closed collectors that have yet to finish."""
+    with _ABANDONED_LOCK:
+        _ABANDONED[:] = [f for f in _ABANDONED if not f.done()]
+        return list(_ABANDONED)
+
+
 class Collector:
     """Collects system metrics from all enabled plugins."""
 
@@ -82,12 +96,26 @@ class Collector:
         # collect() calls. A plugin whose call is still running when the next
         # cycle starts is *not* resubmitted — see collect()'s inflight check.
         self._inflight: dict[str, Any] = {}
+        # Every call submitted to either pool and not yet finished, so close()
+        # can tell which ones it is abandoning.
+        self._running: set[Future] = set()
+        self._running_lock = threading.Lock()
         _register_for_shutdown(self)
         log.info(
             "Collector initialised with %d plugins: %s",
             len(self.plugins),
             [p.name for p in self.plugins],
         )
+
+    def _track(self, future: Future) -> Future:
+        with self._running_lock:
+            self._running.add(future)
+        future.add_done_callback(self._untrack)
+        return future
+
+    def _untrack(self, future: Future) -> None:
+        with self._running_lock:
+            self._running.discard(future)
 
     def _shutdown(self) -> None:
         """Shut down the thread pool gracefully on exit."""
@@ -96,14 +124,22 @@ class Collector:
                 plugin.close()
             except Exception:
                 log.debug("Plugin %s close() failed", plugin.name, exc_info=True)
+        # wait=False: a plugin call that is stuck (disk_usage on a wedged
+        # mount, a Docker daemon that stopped answering) would otherwise hold
+        # up quitting forever. Queued work is cancelled; a call already
+        # running is abandoned to its thread, and its result is never read.
         for executor in (self._async_executor, self._executor):
             try:
-                executor.shutdown(wait=True, cancel_futures=True)
+                executor.shutdown(wait=False, cancel_futures=True)
             except Exception:
-                try:
-                    executor.shutdown(wait=False)
-                except Exception:
-                    pass
+                log.debug("Executor shutdown failed", exc_info=True)
+        # Queued calls were just cancelled; whatever is still pending was
+        # already running and is being left behind.
+        with self._running_lock:
+            left_running = [f for f in self._running if not f.done()]
+        if left_running:
+            with _ABANDONED_LOCK:
+                _ABANDONED.extend(left_running)
 
     def close(self) -> None:
         """Explicitly shut down the executor and drop the atexit registration."""
@@ -118,8 +154,7 @@ class Collector:
     def last_collected_at(self) -> float:
         """Unix time of the most recent completed collection (0.0 if never).
 
-        Public because the API layer needs it to timestamp module responses;
-        it used to reach into ``_last_collected_at`` directly.
+        Part of ``MetricCollector``: the API timestamps module responses with it.
         """
         return self._last_collected_at
 
@@ -164,7 +199,7 @@ class Collector:
                     futures[prior] = plugin
                     continue
                 self._inflight.pop(plugin.name, None)
-                fut = self._executor.submit(plugin.collect)
+                fut = self._track(self._executor.submit(plugin.collect))
                 self._inflight[plugin.name] = fut
                 futures[fut] = plugin
 
@@ -224,13 +259,11 @@ class Collector:
     # the loop; keeping it in-house means the damage is bounded to collection.
     async def collect_module_async(self, name: str) -> Any:
         """Async wrapper around collect_module."""
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self._async_executor, self.collect_module, name)
+        return await self._run_async(self.collect_module, name)
 
     async def collect_async(self) -> SystemSnapshot:
         """Run collection in a thread executor (non-blocking for async apps)."""
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self._async_executor, self.collect)
+        return await self._run_async(self.collect)
 
     def set_collect_cmdline(self, enabled: bool) -> None:
         """Ask the processes plugin to include (or skip) command lines.
@@ -267,8 +300,11 @@ class Collector:
 
     async def collect_processes_async(self, sort_by: str) -> list[Any]:
         """Async wrapper around collect_processes."""
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(self._async_executor, self.collect_processes, sort_by)
+        return await self._run_async(self.collect_processes, sort_by)
+
+    async def _run_async(self, fn, *args):
+        """``run_in_executor`` on the collector's own pool, tracked for close()."""
+        return await asyncio.wrap_future(self._track(self._async_executor.submit(fn, *args)))
 
     # ── private ──────────────────────────────────────────────────────────
 

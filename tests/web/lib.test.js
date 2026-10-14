@@ -100,39 +100,40 @@ describe("process sorting", () => {
         { pid: 2, name: "gamma", username: "zoe", cpu_percent: 5, memory_rss: 200 },
     ];
 
-    it("matches PROCESS_SORT_KEYS' default directions", () => {
-        expect(lib.SORT_KEYS.pid.descending).toBe(false);
-        expect(lib.SORT_KEYS.name.descending).toBe(false);
-        expect(lib.SORT_KEYS.cpu.descending).toBe(true);
-        expect(lib.SORT_KEYS.memory.descending).toBe(true);
+    const spec = (field, descending) => ({ field, descending });
+
+    it("defines only the columns the agent cannot rank by", () => {
+        // The agent's keys (cpu, memory, pid, name) arrive over /health, so a
+        // copy here could only drift from PROCESS_SORT_KEYS.
+        expect(Object.keys(lib.WEB_SORT_KEYS).sort()).toEqual(["rss", "threads", "user"]);
     });
 
     it("compares names case-insensitively, like sort_processes()", () => {
         // Sorting on raw values would put "Alpha" after "beta" here and make
         // the two dashboards interleave differently on the same host.
-        const names = lib.sortProcesses(procs, "name", true).map((p) => p.name);
+        const names = lib.sortProcesses(procs, spec("name", false), true).map((p) => p.name);
         expect(names).toEqual(["Alpha", "beta", "gamma"]);
     });
 
     it("sorts numerics in both directions", () => {
-        expect(lib.sortProcesses(procs, "cpu", false).map((p) => p.cpu_percent)).toEqual([9, 5, 1]);
-        expect(lib.sortProcesses(procs, "pid", true).map((p) => p.pid)).toEqual([1, 2, 3]);
+        const byCpu = lib.sortProcesses(procs, spec("cpu_percent", true), false);
+        expect(byCpu.map((p) => p.cpu_percent)).toEqual([9, 5, 1]);
+        expect(lib.sortProcesses(procs, spec("pid", false), true).map((p) => p.pid)).toEqual([1, 2, 3]);
     });
 
     it("does not mutate the caller's array", () => {
         const original = [...procs];
-        lib.sortProcesses(procs, "pid", true);
+        lib.sortProcesses(procs, spec("pid", false), true);
         expect(procs).toEqual(original);
     });
 
-    it("falls back to the default key for an unknown one", () => {
-        expect(lib.sortProcesses(procs, "nonsense", false).map((p) => p.cpu_percent)).toEqual([
-            9, 5, 1,
-        ]);
+    it("keeps the agent's order when there is no sort definition yet", () => {
+        // Before /health answers, the rows stay as the agent ranked them.
+        expect(lib.sortProcesses(procs, null, false).map((p) => p.pid)).toEqual([3, 1, 2]);
     });
 
     it("treats missing fields as zero rather than throwing", () => {
-        expect(() => lib.sortProcesses([{}, { pid: 1 }], "rss", false)).not.toThrow();
+        expect(() => lib.sortProcesses([{}, { pid: 1 }], lib.WEB_SORT_KEYS.rss, false)).not.toThrow();
     });
 });
 

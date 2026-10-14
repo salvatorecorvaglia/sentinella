@@ -19,11 +19,16 @@ class MemoryWidget(Static):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._history: deque[float] = deque(maxlen=60)
+        self._last_timestamp: float | None = None
 
     def update_data(self, snap: SystemSnapshot) -> None:
         # See CpuWidget: history is widget state, not App state.
         mem = snap.memory
-        self._history.append(mem.percent)
+        # A forced refresh inside the cache TTL re-delivers the same snapshot;
+        # appending it again would put a duplicate point on the sparkline.
+        if snap.timestamp != self._last_timestamp:
+            self._last_timestamp = snap.timestamp
+            self._history.append(mem.percent)
 
         palette = palette_for(self)
         text = Text()

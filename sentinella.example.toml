@@ -20,13 +20,20 @@ container_stats = false     # per-container CPU/memory (one Docker API call each
 enabled = false
 host = "127.0.0.1"
 port = 8080
-api_key = ""                # empty = no authentication
+api_key = ""                # empty = no authentication; or set SENTINELLA_WEB_API_KEY
+allowed_hosts = []          # extra Host names, e.g. ["monitor.example.com"]
+ssl_certfile = ""           # both set = serve HTTPS
+ssl_keyfile = ""
 
 [remote]
 enabled = false
 host = "127.0.0.1"
 port = 9090
-api_key = ""
+api_key = ""                # or set SENTINELLA_REMOTE_API_KEY
+allowed_hosts = []
+ssl_certfile = ""
+ssl_keyfile = ""
+expose_cmdline = false      # command lines often carry secrets
 
 [export]
 format = "text"             # text | csv | json

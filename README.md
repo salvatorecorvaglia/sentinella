@@ -1,4 +1,4 @@
-# Sentinella �
+# Sentinella 🔔
 
 **Cross-platform system monitor with TUI, web dashboard, and remote monitoring**
 
@@ -9,12 +9,12 @@
 ## ✨ Features
 
 - 🖥 **Interactive TUI Dashboard**: A beautiful terminal dashboard powered by [Textual](https://github.com/Textualize/textual). Inspect CPU, memory, disk, network, active processes, users, sensors, and containers. Supports instant runtime theme toggling (`t` key: dark/light), dynamic process re-sorting (`p` key), force refresh (`r` key), and clear visual stale-state indicators during collection hiccups.
-- 🌐 **Modern Web Dashboard**: A real-time browser interface powered by FastAPI and WebSockets via a high-performance, capped `BroadcastHub`. Features 100% offline/air-gapped vendorized assets, persistent light/dark themes, dynamic thresholds and process ranking matching agent config, snapshot payload wire trimming (~70% payload reduction), an accessible (ARIA, keyboard focus-trapped) authentication modal with XOR obfuscation for client-side storage, and reconnection backoff with manual retry.
+- 🌐 **Modern Web Dashboard**: A real-time browser interface powered by FastAPI and WebSockets via a high-performance, capped `BroadcastHub`. Features 100% offline/air-gapped vendorized assets, persistent light/dark themes, dynamic thresholds and process ranking matching agent config, snapshot payload wire trimming (~70% payload reduction), an accessible (ARIA, keyboard focus-trapped) authentication modal (the key is kept for the session only unless you choose to remember it; stored keys are obfuscated, not encrypted), and reconnection backoff with manual retry.
 - 📡 **Remote Monitoring Agent**: Run Sentinella as a remote server agent (`serve` mode) and monitor hosts securely via `RemoteCollector` over HTTP/WebSockets from a centralized Sentinella instance, or fetch console summaries remotely.
 - 🚀 **Quick Summary (`fetch`)**: A quick, `neofetch`-style console summary of system hardware, OS, and resource utilization, available locally or queried from a remote agent (`sentinella --remote HOST:PORT fetch`).
 - 📊 **Structured Exports (`print`)**: Print snapshots of system metrics to stdout in **Text**, **CSV**, or **JSON** formats with module name validation, ideal for scripting, integrations, or cron jobs.
 - 📦 **Container Support**: Native monitoring for Docker and LXC containers (memory, CPU, status, and metadata) with streaming bounded output readers to avoid memory exhaustion.
-- 🔒 **Security-First**: Constant-time API key verification, security headers (`Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy: no-referrer`) applied to all HTTP responses, automatic warnings for insecure open network binds across IPv4/IPv6 without authentication, CSV formula-injection sanitization, and permission warnings (`chmod 600`) for config files holding plaintext credentials.
+- 🔒 **Security-First**: Constant-time API key verification, Host-header allowlisting against DNS rebinding, Origin checks on the live WebSocket, optional HTTPS, API keys from environment variables, security headers (`Content-Security-Policy`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy: no-referrer`) applied to all HTTP responses, automatic warnings for insecure open network binds across IPv4/IPv6 without authentication, CSV formula-injection sanitization, and permission warnings (`chmod 600`) for config files holding plaintext credentials.
 
 ---
 
@@ -127,12 +127,19 @@ enabled = false             # Automatically run web server in TUI background
 host = "127.0.0.1"          # Host address to bind the web server
 port = 8080                 # Port for the web server (1-65535)
 api_key = ""                # API key for the dashboard (empty = no authentication)
+allowed_hosts = []          # Extra Host names to answer to (see below)
+ssl_certfile = ""           # PEM certificate; set with ssl_keyfile to serve HTTPS
+ssl_keyfile = ""            # PEM private key
 
 [remote]
 enabled = false             # Automatically run remote agent in TUI background
 host = "127.0.0.1"          # Host address to bind the agent server
 port = 9090                 # Port for the remote agent (1-65535)
 api_key = ""                # API key for agent connection security
+allowed_hosts = []          # Extra Host names to answer to (see below)
+ssl_certfile = ""           # PEM certificate; set with ssl_keyfile to serve HTTPS
+ssl_keyfile = ""            # PEM private key
+expose_cmdline = false      # Serve process command lines to remote clients
 
 [export]
 format = "text"             # Default export format: "text", "csv", or "json"

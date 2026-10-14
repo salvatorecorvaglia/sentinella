@@ -102,6 +102,10 @@ npm test
 
 # Run tests in watch mode during development
 npm run test:watch
+
+# Run with coverage of lib.js and app.js; fails below the floor in
+# vitest.config.mjs (CI runs this)
+npm run test:coverage
 ```
 
 The Web Dashboard test suite covers:

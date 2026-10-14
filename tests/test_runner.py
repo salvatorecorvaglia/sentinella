@@ -1,4 +1,4 @@
-"""Tests for sentinella.core.runner.start_background_servers.
+"""Tests for sentinella.server.runner.start_background_servers.
 
 Previously had zero test references anywhere — nothing verified that web and
 remote servers actually start when enabled, that both can run simultaneously,
@@ -8,7 +8,7 @@ or that neither starts when disabled.
 from unittest.mock import patch
 
 from sentinella.config import RemoteConfig, SentinellaConfig, WebConfig
-from sentinella.core.runner import start_background_servers
+from sentinella.server.runner import start_background_servers
 
 
 class _ImmediateThread:
@@ -31,8 +31,8 @@ class _ImmediateThread:
 def test_start_background_servers_starts_web_when_enabled(make_collector, dummy_snapshot):
     cfg = SentinellaConfig(web=WebConfig(enabled=True, host="127.0.0.1", port=8123))
     with (
-        patch("sentinella.core.runner.uvicorn.run") as mock_run,
-        patch("sentinella.core.runner.threading.Thread", _ImmediateThread),
+        patch("sentinella.server.runner.uvicorn.run") as mock_run,
+        patch("sentinella.server.runner.threading.Thread", _ImmediateThread),
     ):
         start_background_servers(cfg, collector=make_collector(dummy_snapshot))
 
@@ -44,8 +44,8 @@ def test_start_background_servers_starts_web_when_enabled(make_collector, dummy_
 def test_start_background_servers_starts_remote_when_enabled(make_collector, dummy_snapshot):
     cfg = SentinellaConfig(remote=RemoteConfig(enabled=True, host="127.0.0.1", port=9191))
     with (
-        patch("sentinella.core.runner.uvicorn.run") as mock_run,
-        patch("sentinella.core.runner.threading.Thread", _ImmediateThread),
+        patch("sentinella.server.runner.uvicorn.run") as mock_run,
+        patch("sentinella.server.runner.threading.Thread", _ImmediateThread),
     ):
         start_background_servers(cfg, collector=make_collector(dummy_snapshot))
 
@@ -59,8 +59,8 @@ def test_start_background_servers_starts_both_independently(make_collector, dumm
         remote=RemoteConfig(enabled=True, port=9282),
     )
     with (
-        patch("sentinella.core.runner.uvicorn.run") as mock_run,
-        patch("sentinella.core.runner.threading.Thread", _ImmediateThread),
+        patch("sentinella.server.runner.uvicorn.run") as mock_run,
+        patch("sentinella.server.runner.threading.Thread", _ImmediateThread),
     ):
         start_background_servers(cfg, collector=make_collector(dummy_snapshot))
 
@@ -72,10 +72,23 @@ def test_start_background_servers_starts_both_independently(make_collector, dumm
 def test_start_background_servers_noop_when_both_disabled(make_collector, dummy_snapshot):
     cfg = SentinellaConfig()  # web/remote disabled by default
     with (
-        patch("sentinella.core.runner.uvicorn.run") as mock_run,
-        patch("sentinella.core.runner.threading.Thread") as mock_thread,
+        patch("sentinella.server.runner.uvicorn.run") as mock_run,
+        patch("sentinella.server.runner.threading.Thread") as mock_thread,
     ):
         start_background_servers(cfg, collector=make_collector(dummy_snapshot))
 
     mock_run.assert_not_called()
     mock_thread.assert_not_called()
+
+
+def test_background_servers_do_not_install_their_own_log_handlers(make_collector, dummy_snapshot):
+    """uvicorn's default log config binds a handler to the terminal's stderr
+    before the TUI starts, and its error lines then draw over the dashboard."""
+    cfg = SentinellaConfig(web=WebConfig(enabled=True), remote=RemoteConfig(enabled=True))
+    with (
+        patch("sentinella.server.runner.threading.Thread", _ImmediateThread),
+        patch("sentinella.server.runner.uvicorn.run") as mock_run,
+    ):
+        start_background_servers(cfg, collector=make_collector(dummy_snapshot))
+    assert mock_run.call_count == 2
+    assert all(call.kwargs["log_config"] is None for call in mock_run.call_args_list)

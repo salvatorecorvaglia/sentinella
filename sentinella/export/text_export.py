@@ -63,7 +63,10 @@ class TextExporter(BaseExporter):
                 )
             io = snapshot.disk.io
             parts.append(
-                f"  I/O  R: {human_bytes(io.read_bytes)}  W: {human_bytes(io.write_bytes)}"
+                # One-shot output has a single sample, so these are totals,
+                # labelled as such rather than looking like live throughput.
+                f"  I/O since boot  R: {human_bytes(io.read_bytes)}"
+                f"  W: {human_bytes(io.write_bytes)}"
             )
             parts.append("")
 
@@ -75,7 +78,8 @@ class TextExporter(BaseExporter):
                     f"  {iface.name:<12} ▲ {human_bytes(iface.bytes_sent)}"
                     f"  ▼ {human_bytes(iface.bytes_recv)}  ({addr_str})"
                 )
-            parts.append(f"  Connections: {snapshot.network.connections_count}")
+            conns = snapshot.network.connections_count
+            parts.append(f"  Connections: {'—' if conns is None else conns}")
             parts.append("")
 
         # ── Processes ────────────────────────────────────────────────

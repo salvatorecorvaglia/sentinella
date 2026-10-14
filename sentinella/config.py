@@ -10,12 +10,15 @@ Search order (first match wins):
 from __future__ import annotations
 
 import logging
+import os
 import stat
 import sys
 import tomllib
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import Any
+
+from sentinella.core.constants import EXPORT_FORMATS, PROCESS_SORT_ORDER, THEMES
 
 log = logging.getLogger(__name__)
 
@@ -43,12 +46,19 @@ _DEFAULTS: dict[str, Any] = {
         "host": "127.0.0.1",
         "port": 8080,
         "api_key": "",
+        "allowed_hosts": [],
+        "ssl_certfile": "",
+        "ssl_keyfile": "",
     },
     "remote": {
         "enabled": False,
         "host": "127.0.0.1",
         "port": 9090,
         "api_key": "",
+        "allowed_hosts": [],
+        "ssl_certfile": "",
+        "ssl_keyfile": "",
+        "expose_cmdline": False,
     },
     "export": {
         "format": "text",
@@ -92,6 +102,12 @@ class WebConfig:
     host: str = "127.0.0.1"
     port: int = 8080
     api_key: str = ""
+    # Host header values accepted besides the loopback names. Empty on a
+    # loopback bind = loopback names only; empty on a public bind = any host.
+    allowed_hosts: list[str] = field(default_factory=list)
+    # Serve HTTPS/WSS when both are set (paths to PEM files).
+    ssl_certfile: str = ""
+    ssl_keyfile: str = ""
 
 
 @dataclass
@@ -100,6 +116,12 @@ class RemoteConfig:
     host: str = "127.0.0.1"
     port: int = 9090
     api_key: str = ""
+    allowed_hosts: list[str] = field(default_factory=list)
+    ssl_certfile: str = ""
+    ssl_keyfile: str = ""
+    # Serve process command lines to remote clients (?full=true). Off by
+    # default: command lines routinely carry passwords and tokens.
+    expose_cmdline: bool = False
 
 
 @dataclass
@@ -154,6 +176,10 @@ def _coerce(section: str, key: str, declared: Any, value: Any) -> Any:
         "int": (int, "an integer"),
         "float": ((int, float), "a number"),
     }
+    if type_name == "list[str]":
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            raise ValueError(f"{section}.{key} must be a list of strings, got {value!r}")
+        return list(value)  # never share the defaults' list
     if type_name not in checks:
         return value
 
@@ -248,30 +274,50 @@ def validate_config(config: SentinellaConfig) -> None:
         raise ValueError(
             f"general.refresh_interval must be >= 1, got {config.general.refresh_interval}"
         )
-    if config.general.theme not in ("dark", "light"):
-        raise ValueError(f"general.theme must be 'dark' or 'light', got {config.general.theme!r}")
+    if config.general.theme not in THEMES:
+        raise ValueError(f"general.theme must be {_either(THEMES)}, got {config.general.theme!r}")
     if not (1 <= config.web.port <= 65535):
         raise ValueError(f"web.port must be between 1 and 65535, got {config.web.port}")
     if not (1 <= config.remote.port <= 65535):
         raise ValueError(f"remote.port must be between 1 and 65535, got {config.remote.port}")
-    if config.export.format not in ("text", "csv", "json"):
+    if config.export.format not in EXPORT_FORMATS:
         raise ValueError(
-            f"export.format must be 'text', 'csv', or 'json', got {config.export.format!r}"
+            f"export.format must be {_either(EXPORT_FORMATS)}, got {config.export.format!r}"
         )
     if config.processes.max_display < 1:
         raise ValueError(f"processes.max_display must be >= 1, got {config.processes.max_display}")
-    if config.processes.sort_by not in ("cpu", "memory", "pid", "name"):
+    if config.processes.sort_by not in PROCESS_SORT_ORDER:
         raise ValueError(
-            "processes.sort_by must be one of 'cpu', 'memory', 'pid', 'name', "
+            f"processes.sort_by must be one of {_either(PROCESS_SORT_ORDER)}, "
             f"got {config.processes.sort_by!r}"
         )
+    for section, server in (("web", config.web), ("remote", config.remote)):
+        _validate_tls(section, server.ssl_certfile, server.ssl_keyfile)
+
+
+def _either(choices: tuple[str, ...]) -> str:
+    """``'a' or 'b'`` / ``'a', 'b', or 'c'`` for an error message."""
+    quoted = [repr(c) for c in choices]
+    if len(quoted) <= 2:
+        return " or ".join(quoted)
+    return ", ".join(quoted[:-1]) + ", or " + quoted[-1]
+
+
+def _validate_tls(section: str, certfile: str, keyfile: str) -> None:
+    if bool(certfile) != bool(keyfile):
+        raise ValueError(
+            f"{section}: set both ssl_certfile and ssl_keyfile to serve HTTPS, or neither"
+        )
+    for key, value in (("ssl_certfile", certfile), ("ssl_keyfile", keyfile)):
+        if value and not Path(value).is_file():
+            raise ValueError(f"{section}.{key} not found: {value!r}")
 
 
 def warn_insecure_config_permissions(path: Path, cfg: SentinellaConfig) -> None:
     """Warn if a config file holding a plaintext API key is group/world readable.
 
     POSIX permission bits aren't meaningful on Windows, so this is a no-op
-    there. Mirrors the ``warn_open_bind`` pattern in ``core.api``: a
+    there. Mirrors the ``warn_open_bind`` pattern in ``server.api``: a
     ``log.warning`` for anyone watching logs, plus a stderr print for anyone
     just running the command interactively.
     """
@@ -319,5 +365,25 @@ def load_config(explicit_path: str | None = None) -> SentinellaConfig:
     cfg = _dict_to_config(merged)
     validate_config(cfg)
     if config_file is not None:
+        # Before the environment overrides: the warning is about keys that
+        # are sitting in the file.
         warn_insecure_config_permissions(config_file, cfg)
+    _apply_env_overrides(cfg)
     return cfg
+
+
+# Environment variables that override a key from the file, so a secret can be
+# supplied by a service manager or secret store instead of stored in plaintext.
+_ENV_API_KEYS = {
+    "SENTINELLA_WEB_API_KEY": "web",
+    "SENTINELLA_REMOTE_API_KEY": "remote",
+}
+
+
+def _apply_env_overrides(cfg: SentinellaConfig) -> None:
+    for var, section in _ENV_API_KEYS.items():
+        # An empty variable is treated as unset rather than as "no auth":
+        # clearing a configured key by accident would open the server.
+        value = os.environ.get(var)
+        if value:
+            getattr(cfg, section).api_key = value

@@ -97,18 +97,14 @@
         return "metric-ok";
     }
 
-    // Mirrors PROCESS_SORT_KEYS in sentinella/core/sort.py: same key names, same
-    // field mapping, same default direction.
-    const SORT_KEYS = {
-        pid: { field: "pid", descending: false },
-        name: { field: "name", descending: false },
+    // Columns only the dashboard sorts by. The agent's own keys (cpu, memory,
+    // pid, name) come from /health as sort_keys — built from PROCESS_SORT_KEYS
+    // in sentinella/core/sort.py — so they are not restated here.
+    const WEB_SORT_KEYS = {
         user: { field: "username", descending: false },
-        cpu: { field: "cpu_percent", descending: true },
-        memory: { field: "memory_percent", descending: true },
         rss: { field: "memory_rss", descending: true },
         threads: { field: "num_threads", descending: true },
     };
-    const DEFAULT_SORT_BY = "cpu";
 
     // sort_processes() lower-cases before comparing names, so this must too or
     // the two dashboards interleave differently on the same host.
@@ -129,8 +125,11 @@
         };
     }
 
-    function sortProcesses(procs, sortKey, ascending) {
-        const spec = SORT_KEYS[sortKey] || SORT_KEYS[DEFAULT_SORT_BY];
+    // *spec* is a { field, descending } definition; without one (before
+    // /health has said how the agent sorts) the rows keep the agent's order,
+    // which is already ranked by its configured key.
+    function sortProcesses(procs, spec, ascending) {
+        if (!spec) return [...procs];
         return [...procs].sort(compareProcesses(spec, ascending));
     }
 
@@ -187,8 +186,7 @@
         classForPercent,
         bgClassForPercent,
         classForTemp,
-        SORT_KEYS,
-        DEFAULT_SORT_BY,
+        WEB_SORT_KEYS,
         compareProcesses,
         sortProcesses,
         RUNNING_STATUSES,

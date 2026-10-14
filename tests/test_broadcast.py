@@ -9,7 +9,7 @@ import asyncio
 
 import pytest
 
-from sentinella.core.broadcast import BroadcastHub
+from sentinella.server.broadcast import BroadcastHub
 
 
 class FakeWS:

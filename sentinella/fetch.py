@@ -36,6 +36,15 @@ _SENTINELLA_ART = r"""
 """
 
 
+def _art_lines() -> list[str]:
+    """The logo's rows, with the first row's indentation intact.
+
+    Only the surrounding newlines are trimmed: ``str.strip()`` would also eat
+    the first row's leading spaces and shear it off the rest of the logo.
+    """
+    return _SENTINELLA_ART.strip("\n").splitlines()
+
+
 def _color_percent(percent: float) -> str:
     """Return a colored percentage string."""
     color = color_for_percent(percent)
@@ -160,14 +169,15 @@ def run_fetch(config: SentinellaConfig | None = None, collector: Any = None) -> 
 
     # Users
     if snap.users:
-        user_names = list({escape(u.name) for u in snap.users})
+        # dict.fromkeys de-duplicates but, unlike a set, keeps login order.
+        user_names = list(dict.fromkeys(escape(u.name) for u in snap.users))
         lines.append(f"[bold]Users[/bold]    {', '.join(user_names)}")
 
     # Processes count — the host total, not the truncated display list
     lines.append(f"[bold]Procs[/bold]    {snap.process_count or len(snap.processes)}")
 
     # ── Assemble side-by-side layout ─────────────────────────────────
-    art_lines = _SENTINELLA_ART.strip().splitlines()
+    art_lines = _art_lines()
     info_lines = lines
 
     # Pad to equal height

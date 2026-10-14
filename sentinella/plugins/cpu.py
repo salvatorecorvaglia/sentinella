@@ -50,6 +50,9 @@ class CpuPlugin(MonitorPlugin):
         # Baseline taken at construction so the first collect() has something
         # to diff against instead of reporting a flat zero.
         self._prev_per_cpu = psutil.cpu_times(percpu=True)
+        # Fixed for the life of the process; read once, not every tick.
+        self._logical_cores = psutil.cpu_count(logical=True) or 0
+        self._physical_cores = psutil.cpu_count(logical=False)
 
     def is_available(self) -> bool:
         return True
@@ -106,8 +109,8 @@ class CpuPlugin(MonitorPlugin):
         return CpuMetrics(
             percent_overall=percent_overall,
             percent_per_core=percent_per_core,
-            core_count_logical=psutil.cpu_count(logical=True) or 0,
-            core_count_physical=psutil.cpu_count(logical=False),
+            core_count_logical=self._logical_cores,
+            core_count_physical=self._physical_cores,
             frequency_current_mhz=self._normalise_mhz(freq.current) if freq else None,
             frequency_max_mhz=self._normalise_mhz(freq.max) if freq else None,
             load_avg_1=load1,

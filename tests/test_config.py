@@ -4,6 +4,7 @@ import tempfile
 
 import pytest
 
+from sentinella.cli import main
 from sentinella.config import (
     ExportConfig,
     GeneralConfig,
@@ -120,3 +121,55 @@ def test_config_scalar_sections():
     assert cfg.general.refresh_interval == 2  # default
     assert cfg.web.port == 8080  # default
     assert cfg.remote.port == 9090  # custom overridden value
+
+
+# ── M6: config errors are user errors, not tracebacks ────────────────────────
+
+
+def test_missing_config_file_exits_cleanly(capsys):
+
+    with pytest.raises(SystemExit) as exc:
+        main(["-c", "/nonexistent/sentinella.toml", "fetch"])
+    assert exc.value.code == 2
+    assert "Config file not found" in capsys.readouterr().err
+
+
+def test_invalid_config_value_exits_cleanly(tmp_path, capsys):
+
+    cfg_file = tmp_path / "sentinella.toml"
+    cfg_file.write_text("[general]\nrefresh_interval = 0\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        main(["-c", str(cfg_file), "fetch"])
+    assert exc.value.code == 2
+    assert "refresh_interval" in capsys.readouterr().err
+
+
+def test_malformed_toml_exits_cleanly(tmp_path, capsys):
+
+    cfg_file = tmp_path / "sentinella.toml"
+    cfg_file.write_text("[general\nthis is not toml", encoding="utf-8")
+    with pytest.raises(SystemExit) as exc:
+        main(["-c", str(cfg_file), "fetch"])
+    assert exc.value.code == 2
+
+
+def test_wrong_type_names_the_offending_key():
+    """A string port must be reported by name, not as a bare TypeError."""
+    with pytest.raises(ValueError, match="web.port must be an integer"):
+        _dict_to_config({"web": {"port": "8080"}})
+
+
+def test_wrong_type_for_bool_module_flag():
+    with pytest.raises(ValueError, match="modules.cpu must be a boolean"):
+        _dict_to_config({"modules": {"cpu": "yes"}})
+
+
+def test_float_refresh_interval_is_accepted():
+    cfg = _dict_to_config({"general": {"refresh_interval": 2.5}})
+    assert cfg.general.refresh_interval == 2.5
+
+
+def test_general_config_defaults_are_valid():
+    cfg = GeneralConfig()
+    assert cfg.refresh_interval >= 1
+    assert cfg.theme in ("dark", "light")

@@ -13,16 +13,23 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
+import sys
 import tomllib
 import urllib.parse
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
 from typing import TYPE_CHECKING
 
-import uvicorn
-
 from sentinella.config import load_config, validate_config
+from sentinella.core.constants import EXPORT_FORMATS, MODULE_NAMES
 
 if TYPE_CHECKING:
     from sentinella.config import SentinellaConfig
+    from sentinella.core.protocols import MetricCollector
+
+_LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 
 def remote_address_type(value: str) -> str:
@@ -109,15 +116,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "modules",
         nargs="*",
         default=None,
-        help=(
-            "Module names to print (cpu, memory, disk, network, "
-            "processes, users, sensors, containers, system_info)"
-        ),
+        help=f"Module names to print ({', '.join(sorted(MODULE_NAMES))})",
     )
     print_p.add_argument(
         "--format",
         "-f",
-        choices=["text", "csv", "json"],
+        choices=EXPORT_FORMATS,
         default=None,
         help="Output format (default: from config)",
     )
@@ -127,20 +131,53 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     """Main entry point."""
+    _run(argv)
+    _exit_past_stuck_calls()
+
+
+def _exit_past_stuck_calls(grace: float = 2.0) -> None:
+    """Exit now if a closed collector left a call running that won't finish.
+
+    Collectors no longer wait for a stuck plugin call when they close, but
+    interpreter shutdown joins every executor thread, so one call blocked on a
+    wedged mount or a hung Docker daemon kept the process alive after the
+    command had finished. Calls get *grace* seconds to come back; after that
+    the process exits without joining them. Only calls a closed collector
+    abandoned count — an open collector's idle threads never do.
+    """
+    import concurrent.futures
+
+    from sentinella.core.collector import abandoned_calls
+
+    calls = abandoned_calls()
+    if not calls:
+        return
+    _, still_running = concurrent.futures.wait(calls, timeout=grace)
+    if not still_running:
+        return
+    print(
+        f"sentinella: {len(still_running)} monitoring call(s) still stuck; "
+        "exiting without waiting for them.",
+        file=sys.stderr,
+    )
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
+
+
+def _run(argv: list[str] | None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
     log_level = logging.DEBUG if getattr(args, "verbose", False) else logging.WARNING
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    )
+    logging.basicConfig(level=log_level, format=_LOG_FORMAT)
 
     # Config problems are user errors, not crashes — report them the way
     # argparse reports a bad flag rather than as a traceback.
     try:
         config = load_config(getattr(args, "config", None))
-    except (FileNotFoundError, ValueError, tomllib.TOMLDecodeError) as exc:
+    except (OSError, ValueError, tomllib.TOMLDecodeError) as exc:
+        # OSError covers FileNotFoundError and an unreadable file alike.
         parser.error(str(exc))
 
     command = args.command
@@ -183,12 +220,12 @@ def main(argv: list[str] | None = None) -> None:
 
     # ── web ──────────────────────────────────────────────────────────
     if command == "web":
-        _cmd_web(args, config)
+        _cmd_web(args, config, parser)
         return
 
     # ── serve ────────────────────────────────────────────────────────
     if command == "serve":
-        _cmd_serve(args, config)
+        _cmd_serve(args, config, parser)
         return
 
     # ── default: TUI ─────────────────────────────────────────────────
@@ -216,7 +253,7 @@ def _remote_error_message(addr: str, exc: Exception) -> str:
     return f"could not reach remote agent at {addr}: {exc}"
 
 
-def _get_collector(args: argparse.Namespace, config: SentinellaConfig):
+def _get_collector(args: argparse.Namespace, config: SentinellaConfig) -> MetricCollector:
     """Instantiate a local or remote collector based on CLI arguments."""
     remote_addr = getattr(args, "remote", None)
     if remote_addr:
@@ -238,13 +275,11 @@ def _cmd_print(
     # An unrecognised name used to produce empty output and exit 0, so a typo
     # looked like "this host reports nothing" rather than a mistake.
     if modules:
-        from sentinella.core.api import VALID_MODULES
-
-        unknown = [m for m in modules if m not in VALID_MODULES]
+        unknown = [m for m in modules if m not in MODULE_NAMES]
         if unknown:
             parser.error(
                 f"unknown module(s): {', '.join(sorted(unknown))}. "
-                f"Valid modules: {', '.join(sorted(VALID_MODULES))}"
+                f"Valid modules: {', '.join(sorted(MODULE_NAMES))}"
             )
 
     from sentinella.export import get_exporter
@@ -254,9 +289,7 @@ def _cmd_print(
     # JSON and CSV carry the cmdline field, so pay for it here — it is skipped
     # everywhere else because nothing renders it. Text output doesn't show it.
     if fmt in ("json", "csv"):
-        set_cmdline = getattr(collector, "set_collect_cmdline", None)
-        if set_cmdline is not None:
-            set_cmdline(True)
+        collector.set_collect_cmdline(True)
     try:
         try:
             snapshot = collector.collect()
@@ -267,12 +300,40 @@ def _cmd_print(
                 raise RemoteUnavailable(_remote_error_message(remote_addr, exc)) from exc
             raise
         print(get_exporter(fmt, config).format(snapshot, modules))
+        if remote_addr and fmt in ("json", "csv") and _cmdlines_withheld(snapshot, modules):
+            print(
+                "note: the remote agent does not share process command lines, so the "
+                "cmdline field is empty. Set [remote] expose_cmdline = true on the "
+                "agent to include them.",
+                file=sys.stderr,
+            )
     finally:
         # RemoteCollector holds an HTTP connection pool; Collector a thread pool.
         collector.close()
 
 
-def _cmd_web(args: argparse.Namespace, config: SentinellaConfig) -> None:
+def _validate_overrides(config: SentinellaConfig, parser: argparse.ArgumentParser) -> None:
+    """Re-validate after folding in --host/--port, reporting like a bad flag."""
+    try:
+        validate_config(config)
+    except ValueError as exc:
+        parser.error(str(exc))
+
+
+def _cmdlines_withheld(snapshot, modules: list[str] | None) -> bool:
+    """True if an export includes processes but every command line is blank."""
+    if modules and "processes" not in modules:
+        return False
+    return bool(snapshot.processes) and not any(p.cmdline for p in snapshot.processes)
+
+
+def _cmd_web(
+    args: argparse.Namespace, config: SentinellaConfig, parser: argparse.ArgumentParser
+) -> None:
+    # Imported here, not at module level: uvicorn and FastAPI are most of the
+    # CLI's import time, and fetch/print/the TUI never serve anything.
+    import uvicorn
+
     from sentinella.web.server import create_app
 
     # Fold CLI overrides into the config *before* building the app, so the
@@ -282,14 +343,27 @@ def _cmd_web(args: argparse.Namespace, config: SentinellaConfig) -> None:
         config.web.host = args.host
     if args.port is not None:
         config.web.port = args.port
-    validate_config(config)
+    _validate_overrides(config, parser)
 
     app = create_app(config)
-    print(f"🔔 Sentinella web dashboard → http://{config.web.host}:{config.web.port}")
-    uvicorn.run(app, host=config.web.host, port=config.web.port, log_level="info")
+    web = config.web
+    scheme = "https" if web.ssl_certfile else "http"
+    print(f"🔔 Sentinella web dashboard → {scheme}://{web.host}:{web.port}")
+    uvicorn.run(
+        app,
+        host=web.host,
+        port=web.port,
+        log_level="info",
+        ssl_certfile=web.ssl_certfile or None,
+        ssl_keyfile=web.ssl_keyfile or None,
+    )
 
 
-def _cmd_serve(args: argparse.Namespace, config: SentinellaConfig) -> None:
+def _cmd_serve(
+    args: argparse.Namespace, config: SentinellaConfig, parser: argparse.ArgumentParser
+) -> None:
+    import uvicorn  # see _cmd_web
+
     from sentinella.remote.server import create_remote_app
 
     # See _cmd_web: overrides must reach create_remote_app, not just uvicorn.
@@ -297,25 +371,72 @@ def _cmd_serve(args: argparse.Namespace, config: SentinellaConfig) -> None:
         config.remote.host = args.host
     if args.port is not None:
         config.remote.port = args.port
-    validate_config(config)
+    _validate_overrides(config, parser)
 
     app = create_remote_app(config)
-    print(f"🔔 Sentinella remote agent → http://{config.remote.host}:{config.remote.port}")
-    uvicorn.run(app, host=config.remote.host, port=config.remote.port, log_level="info")
+    remote = config.remote
+    scheme = "https" if remote.ssl_certfile else "http"
+    print(f"🔔 Sentinella remote agent → {scheme}://{remote.host}:{remote.port}")
+    uvicorn.run(
+        app,
+        host=remote.host,
+        port=remote.port,
+        log_level="info",
+        ssl_certfile=remote.ssl_certfile or None,
+        ssl_keyfile=remote.ssl_keyfile or None,
+    )
 
 
 def _cmd_tui(args: argparse.Namespace, config: SentinellaConfig) -> None:
     collector = _get_collector(args, config)
 
+    startup_warnings: list[str] = []
     if not getattr(args, "remote", None):
-        from sentinella.core.runner import start_background_servers
+        from sentinella.server.runner import start_background_servers
 
-        start_background_servers(config, collector=collector)
+        startup_warnings = start_background_servers(config, collector=collector)
 
     from sentinella.tui.app import SentinellaApp
 
-    app = SentinellaApp(collector=collector, config=config)
-    app.run()
+    app = SentinellaApp(collector=collector, config=config, startup_warnings=startup_warnings)
+    with _tui_logging(verbose=getattr(args, "verbose", False)):
+        app.run()
+
+
+def _tui_log_path() -> Path:
+    cache = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+    return Path(cache) / "sentinella" / "sentinella.log"
+
+
+@contextmanager
+def _tui_logging(*, verbose: bool) -> Iterator[None]:
+    """Keep log records off the terminal while the TUI is drawing on it.
+
+    Textual renders on the terminal's stderr, and the StreamHandler that
+    ``basicConfig`` installed holds that same stream, so every warning was
+    written straight over the dashboard. For the lifetime of the app, root
+    logging goes to Textual's own log (visible with ``textual console``) or,
+    with ``--verbose``, to a file. The original handlers come back on exit.
+    """
+    root = logging.getLogger()
+    saved = root.handlers[:]
+    handler: logging.Handler
+    if verbose:
+        path = _tui_log_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handler = logging.FileHandler(path, encoding="utf-8")
+        print(f"Debug log: {path}", file=sys.stderr)
+    else:
+        from textual.logging import TextualHandler
+
+        handler = TextualHandler()
+    handler.setFormatter(logging.Formatter(_LOG_FORMAT))
+    root.handlers = [handler]
+    try:
+        yield
+    finally:
+        root.handlers = saved
+        handler.close()
 
 
 if __name__ == "__main__":

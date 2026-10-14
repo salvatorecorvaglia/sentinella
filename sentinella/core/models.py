@@ -91,7 +91,9 @@ class NetworkInterface:
 @dataclass(frozen=True, slots=True)
 class NetworkMetrics:
     interfaces: list[NetworkInterface] = field(default_factory=list)
-    connections_count: int = 0
+    # None = the platform wouldn't say (macOS refuses net_connections() to
+    # non-root users), which is not the same as zero connections.
+    connections_count: int | None = 0
 
 
 # ── Processes ────────────────────────────────────────────────────────────────

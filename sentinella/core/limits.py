@@ -1,9 +1,7 @@
 """How many rows each surface shows for a variable-length list.
 
-Previously every surface picked its own caps inline — the TUI showed 6
-partitions, ``sentinella print`` 8, and the web dashboard all of them — so the same
-host described itself differently depending on where you looked, and nothing
-told you a list had been cut short.
+Every surface that truncates a list takes its cap from here, so one host
+doesn't describe itself differently depending on where you look.
 
 Two profiles, because the constraint genuinely differs: a dashboard panel has a
 fixed number of cells to draw in, while ``print`` writes to a scrollback buffer

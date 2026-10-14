@@ -19,12 +19,17 @@ class CpuWidget(Static):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         self._history: deque[float] = deque(maxlen=60)
+        self._last_timestamp: float | None = None
 
     def update_data(self, snap: SystemSnapshot) -> None:
         # History lives on the widget: it persists for the widget's lifetime,
         # which is the app's lifetime, without monkey-patching the App object.
         cpu = snap.cpu
-        self._history.append(cpu.percent_overall)
+        # A forced refresh inside the cache TTL re-delivers the same snapshot;
+        # appending it again would put a duplicate point on the sparkline.
+        if snap.timestamp != self._last_timestamp:
+            self._last_timestamp = snap.timestamp
+            self._history.append(cpu.percent_overall)
 
         palette = palette_for(self)
         text = Text()

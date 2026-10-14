@@ -18,7 +18,7 @@ class NetworkPlugin(MonitorPlugin):
     def __init__(self, config=None) -> None:
         super().__init__(config)
         self._ticks = 0
-        self._conn_count = 0
+        self._conn_count: int | None = 0
         self._lock = threading.Lock()
 
     def is_available(self) -> bool:
@@ -55,7 +55,8 @@ class NetworkPlugin(MonitorPlugin):
                 try:
                     self._conn_count = len(psutil.net_connections(kind="inet"))
                 except Exception:
-                    self._conn_count = 0
+                    # Usually AccessDenied. Unknown, not zero.
+                    self._conn_count = None
             conn_count = self._conn_count
 
         return NetworkMetrics(

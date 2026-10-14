@@ -8,15 +8,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from sentinella.core.constants import EXPORT_FORMATS
 from sentinella.export.base import BaseExporter
 
 if TYPE_CHECKING:
     from sentinella.config import SentinellaConfig
 
 __all__ = ["BaseExporter", "EXPORT_FORMATS", "get_exporter"]
-
-# Format names accepted by `sentinella print --format` and `[export] format`.
-EXPORT_FORMATS = ("text", "csv", "json")
 
 
 def get_exporter(fmt: str, config: SentinellaConfig | None = None) -> BaseExporter:

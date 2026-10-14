@@ -1,6 +1,10 @@
 from collections import namedtuple
 from unittest.mock import MagicMock, patch
 
+from sentinella.config import (
+    GeneralConfig,
+    SentinellaConfig,
+)
 from sentinella.plugins.cpu import CpuPlugin
 from sentinella.plugins.disk import DiskPlugin
 from sentinella.plugins.memory import MemoryPlugin
@@ -267,7 +271,7 @@ def test_processes_plugin_sort_override_re_truncates(mock_process_iter):
     """A per-call sort_by must change *truncation*, not just the order of an
     already-truncated slice — otherwise cycling sort in the TUI can never
     surface a process that the default sort's truncation already cut."""
-    from sentinella.config import ProcessesConfig, SentinellaConfig
+    from sentinella.config import ProcessesConfig
 
     def make_info(pid, cpu, mem):
         info = MagicMock()
@@ -301,20 +305,98 @@ def test_processes_plugin_sort_override_re_truncates(mock_process_iter):
     assert any(p.pid == 999 for p in memory_sorted)
 
 
-def test_processes_plugin_config_cache():
-    from sentinella.config import ProcessesConfig, SentinellaConfig
+def test_processes_plugin_uses_the_config_it_is_given():
+    from sentinella.config import ProcessesConfig
 
     custom_cfg = SentinellaConfig(processes=ProcessesConfig(max_display=5))
-    plugin = ProcessesPlugin(config=custom_cfg)
-    assert plugin._config is custom_cfg
+    assert ProcessesPlugin(config=custom_cfg).config is custom_cfg
 
-    with patch("sentinella.config.load_config") as mock_load:
-        mock_load.return_value = custom_cfg
-        plugin_auto = ProcessesPlugin()
-        assert plugin_auto._config is custom_cfg
-        mock_load.assert_called_once()
 
-        # Call collect and make sure load_config is NOT called again
-        with patch("psutil.process_iter", return_value=[]):
-            plugin_auto.collect()
-            mock_load.assert_called_once()
+def test_processes_plugin_without_config_uses_defaults_and_reads_no_files():
+    """It used to call load_config() itself — reading sentinella.toml from the
+    working directory as a hidden side effect of constructing a plugin."""
+
+    with (
+        patch("sentinella.config.load_config") as mock_load,
+        patch("psutil.process_iter", return_value=[]),
+    ):
+        plugin = ProcessesPlugin()
+        plugin.collect()
+    mock_load.assert_not_called()
+    assert plugin.config == SentinellaConfig()
+
+
+def _fake_proc(pid, cpu, mem):
+    proc = MagicMock()
+    proc.info = {
+        "pid": pid,
+        "name": f"p{pid}",
+        "username": "user",
+        "cpu_percent": cpu,
+        "memory_percent": mem,
+        "status": "running",
+        "num_threads": 1,
+        "memory_info": MagicMock(rss=1000),
+    }
+    return proc
+
+
+@patch("psutil.process_iter")
+def test_processes_resort_reuses_the_recent_scan(mock_process_iter):
+    """A re-sort right after a scan must not scan again.
+
+    psutil measures cpu_percent since the previous call on the same cached
+    Process, so a second process_iter a few milliseconds later reports noise —
+    that is what the TUI showed in the CPU% column whenever the active sort
+    differed from processes.sort_by — and it doubled the costliest collection.
+    """
+
+    mock_process_iter.return_value = [_fake_proc(1, 50.0, 1.0), _fake_proc(2, 5.0, 9.0)]
+    plugin = ProcessesPlugin(SentinellaConfig(general=GeneralConfig(refresh_interval=2.0)))
+
+    by_cpu = plugin.collect()
+    by_mem = plugin.collect(sort_by="memory")
+
+    assert mock_process_iter.call_count == 1
+    assert [p.pid for p in by_cpu] == [1, 2]
+    assert [p.pid for p in by_mem] == [2, 1]
+    assert {p.pid: p.cpu_percent for p in by_cpu} == {p.pid: p.cpu_percent for p in by_mem}
+
+
+@patch("psutil.process_iter")
+def test_processes_rescans_once_the_scan_is_stale(mock_process_iter):
+
+    mock_process_iter.return_value = [_fake_proc(1, 50.0, 1.0)]
+    plugin = ProcessesPlugin(SentinellaConfig(general=GeneralConfig(refresh_interval=2.0)))
+
+    with patch("sentinella.plugins.processes.time.monotonic", side_effect=[100.0, 102.0]):
+        plugin.collect()
+        plugin.collect()
+
+    assert mock_process_iter.call_count == 2
+
+
+@patch("psutil.process_iter")
+def test_processes_rescans_when_cmdline_is_newly_wanted(mock_process_iter):
+
+    mock_process_iter.return_value = [_fake_proc(1, 50.0, 1.0)]
+    plugin = ProcessesPlugin(SentinellaConfig())
+
+    plugin.collect()
+    plugin.collect(with_cmdline=True)
+
+    assert mock_process_iter.call_count == 2
+    assert "cmdline" in mock_process_iter.call_args.kwargs["attrs"]
+
+
+# ── Phase 4 (P2): cmdline is only gathered when something will show it ──────
+
+
+def test_cmdline_is_skipped_unless_requested(mock_config):
+    from sentinella.plugins.processes import ProcessesPlugin
+
+    plugin = ProcessesPlugin(mock_config)
+    assert all(not p.cmdline for p in plugin.collect())
+
+    plugin.collect_cmdline = True
+    assert any(p.cmdline for p in plugin.collect())

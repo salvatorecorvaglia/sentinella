@@ -31,3 +31,15 @@ def test_cpu_metrics():
     )
     assert cpu.percent_overall == 50.0
     assert len(cpu.percent_per_core) == 1
+
+
+def test_container_running_status_has_one_definition():
+    from sentinella.core.models import ContainerInfo
+
+    assert ContainerInfo(status="running").is_running
+    assert ContainerInfo(status="up").is_running
+    # LXC reports "Running"; the plugin lower-cases, but the model shouldn't
+    # depend on that having happened.
+    assert ContainerInfo(status="Running").is_running
+    assert not ContainerInfo(status="exited").is_running
+    assert not ContainerInfo(status="").is_running

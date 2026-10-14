@@ -18,6 +18,7 @@ from typing import Any
 
 import httpx
 
+from sentinella.core.constants import API_VERSION, MODULE_NAMES
 from sentinella.core.models import (
     BatteryInfo,
     ContainerInfo,
@@ -49,19 +50,12 @@ _FULL_SNAPSHOT = {"full": "true"}
 
 # Assumed when the agent hasn't been asked (or can't be reached): better to
 # offer a module and fail than to hide one that is actually there.
-_ALL_MODULES = frozenset(
-    {
-        "cpu",
-        "memory",
-        "disk",
-        "network",
-        "processes",
-        "users",
-        "sensors",
-        "containers",
-        "system_info",
-    }
-)
+_ALL_MODULES = MODULE_NAMES
+
+# After a failed /health probe, how long active_modules answers from the
+# fallback before asking the agent again. It is a property, so without this an
+# unreachable agent cost a blocking request (10 s timeout) on every read.
+_PROBE_RETRY_SECONDS = 30.0
 
 
 class RemoteCollector:
@@ -80,9 +74,10 @@ class RemoteCollector:
         self._pending_close_tasks: set[asyncio.Task] = set()
         self._last_collected_at: float = 0.0
         # Populated from the agent's /health on first contact. Until then,
-        # assume the agent serves everything — the same assumption core.api
+        # assume the agent serves everything — the same assumption server.api
         # made for collectors that didn't advertise the set.
         self._active_modules: frozenset[str] | None = None
+        self._probe_failed_at: float | None = None
 
     def _headers(self) -> dict[str, str]:
         hdrs: dict[str, str] = {}
@@ -166,13 +161,29 @@ class RemoteCollector:
         """
         if self._active_modules is not None:
             return self._active_modules
+        if (
+            self._probe_failed_at is not None
+            and time.monotonic() - self._probe_failed_at < _PROBE_RETRY_SECONDS
+        ):
+            return _ALL_MODULES
         try:
             resp = self._get_client().get(f"{self.base_url}/health", headers=self._headers())
             resp.raise_for_status()
-            modules = resp.json().get("active_modules")
+            health = resp.json()
+            modules = health.get("active_modules")
         except Exception:
             log.debug("Could not read active_modules from the agent", exc_info=True)
+            self._probe_failed_at = time.monotonic()
             return _ALL_MODULES
+        agent_api = health.get("api_version")
+        if agent_api is not None and agent_api != API_VERSION:
+            log.warning(
+                "Agent at %s speaks API v%s; this client expects v%s — "
+                "some fields may be missing or misread. Upgrade the older side.",
+                self.base_url,
+                agent_api,
+                API_VERSION,
+            )
         if not isinstance(modules, list):
             return _ALL_MODULES
         self._active_modules = frozenset(str(m) for m in modules)
@@ -195,6 +206,15 @@ class RemoteCollector:
             return None
         resp.raise_for_status()
         return resp.json().get("data")
+
+    def set_collect_cmdline(self, enabled: bool) -> None:
+        """No-op: whether command lines are shared is the agent's decision
+        (``[remote] expose_cmdline``), and ``?full=true`` already asks for them."""
+
+    async def collect_processes_async(self, sort_by: str) -> None:
+        """``None``: the agent ranks and truncates by its own configured key,
+        and the API has no way to ask it for another."""
+        return None
 
     def collect(self) -> SystemSnapshot:
         """Synchronous fetch of a remote snapshot using a persistent client."""
@@ -266,7 +286,8 @@ class RemoteCollector:
         ]
         network = NetworkMetrics(
             interfaces=ifaces,
-            connections_count=net_data.get("connections_count") or 0,
+            # null = the agent couldn't tell; absent = an older agent.
+            connections_count=net_data.get("connections_count", 0),
         )
 
         # Processes

@@ -55,7 +55,8 @@ class SensorWidget(Static):
 
         # Users
         if snap.users:
-            user_names = list({u.name for u in snap.users})
+            # dict.fromkeys de-duplicates but, unlike a set, keeps login order.
+            user_names = list(dict.fromkeys(u.name for u in snap.users))
             limit = DASHBOARD_LIMITS["users"]
             section_header(text, "Users", palette)
             text.append(f"  {', '.join(user_names[:limit])}\n")

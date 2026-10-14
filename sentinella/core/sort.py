@@ -1,9 +1,8 @@
 """Shared process sort-key definitions.
 
 Single source of truth for how a ``processes.sort_by`` config value maps to a
-``ProcessInfo`` attribute and sort direction — previously duplicated across
-``export/base.py``, ``plugins/processes.py``, and
-``tui/widgets/process_table.py``.
+``ProcessInfo`` attribute and sort direction, used by the processes plugin, the
+exporters and the TUI's process table (``lib.js`` mirrors it for the web).
 """
 
 from __future__ import annotations

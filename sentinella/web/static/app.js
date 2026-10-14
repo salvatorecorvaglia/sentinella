@@ -7,6 +7,9 @@
 
     // ── Constants ───────────────────────────────────────────────────────
     const MAX_HISTORY = 60;
+    // The payload contract this page was written against; the agent reports
+    // its own in /health (API_VERSION in sentinella/core/constants.py).
+    const API_VERSION = 1;
     const RECONNECT_DELAY = 3000;
     const RECONNECT_MAX_DELAY = 30000;
     // After this many failures the page stops retrying and says so, rather
@@ -26,9 +29,23 @@
     let prevNetRecv = 0;
     let prevNetTime = 0;
     let prevIfaceData = {};
+    // Previous disk counters and the rates derived from them (see updateDisk).
+    let prevDisk = null;
+    let diskRates = null;
     let lastSnapshot = null;
-    // SORT_KEYS / DEFAULT_SORT_BY come from lib.js, which mirrors
-    // PROCESS_SORT_KEYS in sentinella/core/sort.py.
+    // Stale detection: when the snapshot timestamp last moved, by this
+    // browser's clock (the agent's clock may be set differently).
+    let lastSnapshotTimestamp = null;
+    let lastAdvanceMs = 0;
+    let stale = false;
+    // Overridden from /health; a stream that stops advancing for several
+    // intervals is flagged as stale.
+    let refreshInterval = 2;
+    // From /health: { key: { field, descending } } for every key the agent can
+    // rank the whole host by. Empty until it answers.
+    let agentSortSpecs = {};
+    let healthLoaded = false;
+    // null = the agent's own order, until /health says what it sorted by.
     let sortKey = null;
     let sortAsc = true;
     // null until /health answers; then the set of modules this agent monitors.
@@ -50,25 +67,12 @@
     // than keeping a second copy in step by comment.
     let thresholds = { percent: [50, 80], temp: [70, 85] };
 
-    // Cards whose data comes from a single module, so a disabled module can be
-    // labelled "not monitored" rather than rendering a misleading zero.
-    const CARD_MODULES = {
-        "cpu-card": "cpu",
-        "memory-card": "memory",
-        "network-card": "network",
-        "disk-card": "disk",
-        "sensors-card": "sensors",
-        "users-card": "users",
-        "containers-card": "containers",
-        "process-card": "processes",
-    };
-
+    // Each card names its module in the markup (data-module), so a disabled
+    // module reads as "not monitored" rather than as a misleading zero.
     function applyModuleAvailability() {
         if (!activeModules) return;
-        Object.entries(CARD_MODULES).forEach(([cardId, mod]) => {
-            const card = document.getElementById(cardId);
-            if (!card) return;
-            card.classList.toggle("module-disabled", !activeModules.includes(mod));
+        document.querySelectorAll("[data-module]").forEach((card) => {
+            card.classList.toggle("module-disabled", !activeModules.includes(card.dataset.module));
         });
     }
 
@@ -77,26 +81,55 @@
     // through textContent, which cannot execute markup. A helper invites the
     // string-concatenation habit that would make one necessary.
 
+    // Web Storage throws on *any* access in some privacy modes and embedded
+    // contexts. Nothing it holds is essential — a remembered key or theme —
+    // so a blocked store reads as empty and writes are dropped.
+    const safeStorage = {
+        get(area, key) {
+            try {
+                return window[area].getItem(key);
+            } catch (e) {
+                return null;
+            }
+        },
+        set(area, key, value) {
+            try {
+                window[area].setItem(key, value);
+            } catch (e) {
+                /* storage unavailable */
+            }
+        },
+        remove(area, key) {
+            try {
+                window[area].removeItem(key);
+            } catch (e) {
+                /* storage unavailable */
+            }
+        },
+    };
+
     // Session-only by default: the key dies with the tab unless the user
     // explicitly opts into persisting it on this device.
     function storeKey(key, persist) {
-        sessionStorage.setItem("sentinella_api_key", obfuscateKey(key));
+        safeStorage.set("sessionStorage", "sentinella_api_key", obfuscateKey(key));
         if (persist) {
-            localStorage.setItem("sentinella_api_key", obfuscateKey(key));
+            safeStorage.set("localStorage", "sentinella_api_key", obfuscateKey(key));
         } else {
-            localStorage.removeItem("sentinella_api_key");
+            safeStorage.remove("localStorage", "sentinella_api_key");
         }
     }
 
     function loadKey() {
         return deobfuscateKey(
-            sessionStorage.getItem("sentinella_api_key") || localStorage.getItem("sentinella_api_key") || ""
+            safeStorage.get("sessionStorage", "sentinella_api_key") ||
+                safeStorage.get("localStorage", "sentinella_api_key") ||
+                ""
         );
     }
 
     function clearKey() {
-        sessionStorage.removeItem("sentinella_api_key");
-        localStorage.removeItem("sentinella_api_key");
+        safeStorage.remove("sessionStorage", "sentinella_api_key");
+        safeStorage.remove("localStorage", "sentinella_api_key");
     }
 
     // ── Shared pure helpers ─────────────────────────────────────────────
@@ -108,8 +141,7 @@
         humanBytesRate,
         computeRate,
         formatUptime,
-        SORT_KEYS,
-        DEFAULT_SORT_BY,
+        WEB_SORT_KEYS,
         sortProcesses,
         isRunningContainer,
         reconnectDelay,
@@ -117,8 +149,10 @@
         deobfuscateKey,
     } = window.SentinellaLib;
 
-    sortKey = DEFAULT_SORT_BY;
-    sortAsc = !SORT_KEYS[DEFAULT_SORT_BY].descending;
+    // The agent's definition of a sort key, or a dashboard-only column's.
+    function sortSpec(key) {
+        return agentSortSpecs[key] || WEB_SORT_KEYS[key] || null;
+    }
 
     // Thresholds are agent-supplied (see /health), so these wrap the pure
     // versions with the values currently in force.
@@ -156,133 +190,120 @@
     }
 
     // ── Chart Setup ─────────────────────────────────────────────────────
-    function createChart(canvasId, label, borderColor, bgColor) {
+    // Colours come from the --chart-* tokens in style.css (one place, both
+    // themes); a canvas can't read CSS itself, so they're looked up here.
+    function chartPalette() {
+        const style = getComputedStyle(document.body);
+        const token = (name) => style.getPropertyValue(`--chart-${name}`).trim();
+        return {
+            cpu: token("cpu"),
+            cpuFill: token("cpu-fill"),
+            mem: token("mem"),
+            memFill: token("mem-fill"),
+            sent: token("sent"),
+            sentFill: token("sent-fill"),
+            recv: token("recv"),
+            recvFill: token("recv-fill"),
+            grid: token("grid"),
+            tick: token("tick"),
+            legend: token("legend"),
+            tooltipBg: token("tooltip-bg"),
+            tooltipTitle: token("tooltip-title"),
+            tooltipText: token("tooltip-text"),
+            tooltipBorder: token("tooltip-border"),
+        };
+    }
+
+    const AXIS_FONT = { size: 10, family: "'JetBrains Mono', monospace" };
+
+    function tooltipOptions(palette) {
+        return {
+            backgroundColor: palette.tooltipBg,
+            titleColor: palette.tooltipTitle,
+            bodyColor: palette.tooltipText,
+            borderColor: palette.tooltipBorder,
+            borderWidth: 1,
+            cornerRadius: 8,
+            padding: 8,
+        };
+    }
+
+    function lineDataset(label, color, fill) {
+        return {
+            label: label,
+            data: [],
+            borderColor: color,
+            backgroundColor: fill,
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+        };
+    }
+
+    function createChart(canvasId, datasets, { legend = false, formatTick = null, formatTooltip = null } = {}) {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return null;
+        const palette = chartPalette();
+        const tooltip = tooltipOptions(palette);
+        if (formatTooltip) tooltip.callbacks = { label: formatTooltip };
+        const ticks = { color: palette.tick, font: AXIS_FONT };
+        if (formatTick) ticks.callback = formatTick;
         return new Chart(ctx, {
             type: "line",
-            data: {
-                labels: timeLabels(),
-                datasets: [{
-                    label: label,
-                    data: [],
-                    borderColor: borderColor,
-                    backgroundColor: bgColor,
-                    borderWidth: 2,
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 0,
-                    pointHoverRadius: 3,
-                }],
-            },
+            data: { labels: timeLabels(), datasets: datasets },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: { duration: 300 },
                 plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        backgroundColor: "rgba(20, 27, 45, 0.95)",
-                        titleColor: "#00d2ff",
-                        bodyColor: "#e6f1ff",
-                        borderColor: "rgba(0, 210, 255, 0.3)",
-                        borderWidth: 1,
-                        cornerRadius: 8,
-                        padding: 8,
-                    },
+                    legend: legend
+                        ? { display: true, labels: { color: palette.legend, font: AXIS_FONT, boxWidth: 12 } }
+                        : { display: false },
+                    tooltip: tooltip,
                 },
                 scales: {
                     x: { display: false },
                     y: {
                         display: true,
                         min: 0,
-                        grid: {
-                            color: "rgba(255, 255, 255, 0.04)",
-                            drawBorder: false,
-                        },
-                        ticks: {
-                            color: "#5a6785",
-                            font: { size: 10, family: "'JetBrains Mono', monospace" },
-                        },
+                        grid: { color: palette.grid, drawBorder: false },
+                        ticks: ticks,
                     },
                 },
             },
         });
     }
 
+    // Which palette entries colour each chart's datasets, in dataset order.
+    const CHART_SERIES = new Map();
+
+    function createPercentChart(canvasId, label, series) {
+        const palette = chartPalette();
+        const chart = createChart(canvasId, [
+            lineDataset(label, palette[series], palette[series + "Fill"]),
+        ]);
+        if (chart) CHART_SERIES.set(chart, [series]);
+        return chart;
+    }
+
     function createNetChart(canvasId) {
-        const ctx = document.getElementById(canvasId);
-        if (!ctx) return null;
-        return new Chart(ctx, {
-            type: "line",
-            data: {
-                labels: timeLabels(),
-                datasets: [
-                    {
-                        label: "Sent",
-                        data: [],
-                        borderColor: "#00d2ff",
-                        backgroundColor: "rgba(0, 210, 255, 0.08)",
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 0,
-                    },
-                    {
-                        label: "Received",
-                        data: [],
-                        borderColor: "#64ffda",
-                        backgroundColor: "rgba(100, 255, 218, 0.08)",
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 0,
-                    },
-                ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: { duration: 300 },
-                plugins: {
-                    legend: {
-                        display: true,
-                        labels: {
-                            color: "#8892b0",
-                            font: { size: 10, family: "'JetBrains Mono', monospace" },
-                            boxWidth: 12,
-                        },
-                    },
-                    tooltip: {
-                        backgroundColor: "rgba(20, 27, 45, 0.95)",
-                        titleColor: "#00d2ff",
-                        bodyColor: "#e6f1ff",
-                        borderColor: "rgba(0, 210, 255, 0.3)",
-                        borderWidth: 1,
-                        cornerRadius: 8,
-                        callbacks: {
-                            label: (ctx) => ctx.dataset.label + ": " + humanBytesRate(ctx.parsed.y),
-                        },
-                    },
-                },
-                scales: {
-                    x: { display: false },
-                    y: {
-                        display: true,
-                        min: 0,
-                        grid: {
-                            color: "rgba(255, 255, 255, 0.04)",
-                            drawBorder: false,
-                        },
-                        ticks: {
-                            color: "#5a6785",
-                            font: { size: 10, family: "'JetBrains Mono', monospace" },
-                            callback: (v) => humanBytes(v),
-                        },
-                    },
-                },
-            },
-        });
+        const palette = chartPalette();
+        const chart = createChart(
+            canvasId,
+            [
+                lineDataset("Sent", palette.sent, palette.sentFill),
+                lineDataset("Received", palette.recv, palette.recvFill),
+            ],
+            {
+                legend: true,
+                formatTick: (v) => humanBytes(v),
+                formatTooltip: (ctx) => ctx.dataset.label + ": " + humanBytesRate(ctx.parsed.y),
+            }
+        );
+        if (chart) CHART_SERIES.set(chart, ["sent", "recv"]);
+        return chart;
     }
 
     // ── Update Functions ────────────────────────────────────────────────
@@ -365,12 +386,10 @@
         document.getElementById("mem-avail").textContent = humanBytes(mem.available || 0);
 
         // Progress bars
-        document.getElementById("ram-bar").style.width = (mem.percent || 0) + "%";
-        if ((mem.percent || 0) > 80) {
-            document.getElementById("ram-bar").classList.add("warn");
-        } else {
-            document.getElementById("ram-bar").classList.remove("warn");
-        }
+        const ramBar = document.getElementById("ram-bar");
+        ramBar.style.width = (mem.percent || 0) + "%";
+        // The same crit threshold every other reading uses, from /health.
+        ramBar.classList.toggle("warn", (mem.percent || 0) >= thresholds.percent[1]);
 
         document.getElementById("swap-bar").style.width = (mem.swap_percent || 0) + "%";
 
@@ -386,7 +405,9 @@
 
     function updateNetwork(snap) {
         const net = snap.network || {};
-        document.getElementById("net-connections").textContent = (net.connections_count || 0) + " conn";
+        // null = the agent's platform wouldn't say; not the same as zero.
+        const conns = net.connections_count == null ? "—" : net.connections_count;
+        document.getElementById("net-connections").textContent = conns + " conn";
 
         const allInterfaces = net.interfaces || [];
         const interfaces = allInterfaces
@@ -524,9 +545,30 @@
             "disk-partitions", (disk.partitions || []).length - partitions.length, "partitions"
         );
 
+        // The counters are totals since boot; shown bare, beside live bars,
+        // they read as current throughput. Show the rate over *snapshot* time
+        // (a repeated snapshot keeps the last rate), and the totals on hover.
         const io = disk.io || {};
-        document.getElementById("disk-read").textContent = humanBytes(io.read_bytes || 0);
-        document.getElementById("disk-write").textContent = humanBytes(io.write_bytes || 0);
+        const current = {
+            read: io.read_bytes || 0,
+            write: io.write_bytes || 0,
+            time: Number(snap.timestamp) || 0,
+        };
+        if (prevDisk && current.time > prevDisk.time) {
+            const dt = current.time - prevDisk.time;
+            diskRates = {
+                read: computeRate(current.read, prevDisk.read, dt),
+                write: computeRate(current.write, prevDisk.write, dt),
+            };
+        }
+        if (!prevDisk || current.time > prevDisk.time) prevDisk = current;
+
+        const readEl = document.getElementById("disk-read");
+        const writeEl = document.getElementById("disk-write");
+        readEl.textContent = diskRates ? humanBytesRate(diskRates.read) : "—";
+        writeEl.textContent = diskRates ? humanBytesRate(diskRates.write) : "—";
+        readEl.title = "Read since boot: " + humanBytes(current.read);
+        writeEl.title = "Written since boot: " + humanBytes(current.write);
     }
 
     function updateSensors(snap) {
@@ -627,13 +669,13 @@
 
     function updateUsers(snap) {
         const users = snap.users || [];
-        document.getElementById("user-count").textContent = users.length;
         const seen = new Set();
         const uniqueUsers = users.filter((u) => {
             if (seen.has(u.name)) return false;
             seen.add(u.name);
             return true;
         });
+        document.getElementById("user-count").textContent = uniqueUsers.length;
         const filteredUsers = uniqueUsers.slice(0, displayLimits.users);
 
         const container = document.getElementById("user-list");
@@ -722,23 +764,34 @@
     // only reorder what arrived, so any other key is a sort *within* that
     // slice, not a true ranking of the host — say so rather than implying
     // "top 25 by RSS" when it is "top 25 by CPU, reordered by RSS".
-    let agentSortBy = DEFAULT_SORT_BY;
+    let agentSortBy = null;
 
     function updateProcessNote(shown, total) {
         const note = document.getElementById("process-note");
         if (!note) return;
-        if (total > shown && sortKey !== agentSortBy) {
-            note.textContent =
-                `Showing ${shown} of ${total} — ranked by ${agentSortBy} on the agent, ` +
-                `then sorted by ${sortKey} here.`;
-            note.hidden = false;
-        } else if (total > shown) {
-            note.textContent = `Showing ${shown} of ${total}, ranked by ${agentSortBy}.`;
-            note.hidden = false;
-        } else {
+        if (total <= shown) {
             note.textContent = "";
             note.hidden = true;
+            return;
         }
+        const base = agentSortBy
+            ? `Showing ${shown} of ${total}, ranked by ${agentSortBy} on the agent`
+            : `Showing ${shown} of ${total}, as ranked by the agent`;
+        if (sortKey === null || sortKey === agentSortBy) {
+            note.textContent = base + ".";
+        } else if (healthLoaded && !(sortKey in agentSortSpecs)) {
+            // A column only this page sorts by: say it can't be a host-wide top-N.
+            note.textContent =
+                `${base}. The agent can't rank by ${sortKey}, ` +
+                `so this only reorders these ${shown}.`;
+        } else if (healthLoaded) {
+            note.textContent =
+                `${base}, reordered by ${sortKey} here. ` +
+                `Set processes.sort_by = "${sortKey}" to rank the whole host by it.`;
+        } else {
+            note.textContent = `${base}, reordered by ${sortKey} here.`;
+        }
+        note.hidden = false;
     }
 
     function updateProcesses(snap) {
@@ -749,7 +802,7 @@
 
         // Sort. sort_processes() lower-cases before comparing names, so this
         // must too or the two dashboards interleave differently.
-        const sorted = sortProcesses(procs, sortKey, sortAsc);
+        const sorted = sortProcesses(procs, sortSpec(sortKey), sortAsc);
 
         // Update header sort indicators
         document.querySelectorAll("#process-table th[data-sort]").forEach((th) => {
@@ -821,6 +874,11 @@
         updateProcessNote(showProcs.length, total);
     }
 
+    const CARD_UPDATES = [
+        updateHeader, updateCpu, updateMemory, updateNetwork, updateDisk,
+        updateSensors, updateUsers, updateContainers, updateProcesses,
+    ];
+
     // ── Process table sorting ───────────────────────────────────────────
     const processTable = document.getElementById("process-table");
 
@@ -830,9 +888,10 @@
             sortAsc = !sortAsc;
         } else {
             sortKey = key;
-            // PID and Name ascend by default, the numeric columns descend —
-            // same as PROCESS_SORT_KEYS rather than always descending.
-            sortAsc = !(SORT_KEYS[key] || SORT_KEYS[DEFAULT_SORT_BY]).descending;
+            // Each key's own default direction: PID and Name ascend, the
+            // numeric columns descend (the agent's definitions, for its keys).
+            const spec = sortSpec(key);
+            sortAsc = spec ? !spec.descending : true;
         }
         if (lastSnapshot) {
             updateProcesses(lastSnapshot);
@@ -858,13 +917,13 @@
     function showAuthModal(message) {
         const modal = document.getElementById("auth-modal");
         if (!modal) return;
-        modal.style.display = "flex";
+        modal.hidden = false;
         // Distinguish "wrong key" from "server restarted" — previously both
         // just re-showed a blank form.
         const err = document.getElementById("auth-error");
         if (err) {
             err.textContent = message || "";
-            err.style.display = message ? "block" : "none";
+            err.hidden = !message;
         }
         const input = document.getElementById("auth-key-input");
         if (input) {
@@ -876,7 +935,7 @@
     function hideAuthModal() {
         const modal = document.getElementById("auth-modal");
         if (modal) {
-            modal.style.display = "none";
+            modal.hidden = true;
         }
     }
 
@@ -885,7 +944,7 @@
     function trapAuthModalFocus(e) {
         if (e.key !== "Tab") return;
         const modal = document.getElementById("auth-modal");
-        if (!modal || modal.style.display !== "flex") return;
+        if (!modal || modal.hidden) return;
         const focusable = modal.querySelectorAll(
             'input, button, [href], select, textarea, [tabindex]:not([tabindex="-1"])'
         );
@@ -902,11 +961,22 @@
     }
     document.addEventListener("keydown", trapAuthModalFocus);
 
+    // Shown only while a reconnect is actually pending — not on first load,
+    // not while waiting for a key, not once the retry budget is spent.
+    function showToast(message) {
+        const toast = document.getElementById("conn-toast");
+        if (!toast) return;
+        toast.textContent = message || "";
+        toast.hidden = !message;
+    }
+
     // Exponential backoff, so a downed server is not polled every 3 s forever.
-    function scheduleReconnect(badge) {
+    // *reason* prefixes the countdown ("Server busy") so a 1013 still says why.
+    function scheduleReconnect(badge, reason) {
         if (reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
             badge.textContent = "Disconnected";
             badge.title = "Server unreachable.";
+            showToast("");
             // Telling someone to reload is a dead end when a click will do.
             showRetryButton();
             return;
@@ -915,7 +985,11 @@
             reconnectAttempts, RECONNECT_DELAY, RECONNECT_MAX_DELAY, RECONNECT_MAX_ATTEMPTS
         );
         reconnectAttempts += 1;
-        badge.textContent = `Reconnecting in ${Math.round(delay / 1000)}s…`;
+        const seconds = Math.round(delay / 1000);
+        badge.textContent = reason
+            ? `${reason} — retrying in ${seconds}s…`
+            : `Reconnecting in ${seconds}s…`;
+        showToast("Connection lost. Reconnecting…");
         clearTimeout(reconnectTimer);
         reconnectTimer = setTimeout(connect, delay);
     }
@@ -964,11 +1038,17 @@
         }
 
         const url = proto + "//" + location.host + "/ws/live";
-        ws = new WebSocket(url);
+        // Handlers close over *this* socket, not the module-level `ws`: a late
+        // event from a replaced socket must not act on its successor.
+        const socket = new WebSocket(url);
+        ws = socket;
+        // Per connection, not per page: every reconnect has to earn "Live"
+        // again with a frame of its own.
+        let receivedFrame = false;
 
-        ws.onopen = () => {
+        socket.onopen = () => {
             // Send API key as first message (avoids leaking in URL/logs)
-            ws.send(apiKey);
+            socket.send(apiKey);
 
             // Not "Live" yet: the server has not validated the key. Saying so
             // here flashed a connected badge at a user whose key was about to
@@ -985,7 +1065,16 @@
             fetch("/health")
                 .then((r) => r.json())
                 .then((d) => {
-                    document.getElementById("app-version").textContent = "v" + (d.version || "?");
+                    let versionText = "v" + (d.version || "?");
+                    // Payload contract version (API_VERSION in core/constants.py).
+                    if (d.api_version !== undefined && d.api_version !== API_VERSION) {
+                        versionText += ` · API v${d.api_version} (this page expects v${API_VERSION})`;
+                        console.warn(
+                            `Sentinella agent speaks API v${d.api_version}; this dashboard ` +
+                                `expects v${API_VERSION}. Reload, or update the older side.`
+                        );
+                    }
+                    document.getElementById("app-version").textContent = versionText;
                     activeModules = d.active_modules || null;
                     applyModuleAvailability();
                     if (Number(d.max_display) > 0) {
@@ -998,57 +1087,90 @@
                     if (d.thresholds) {
                         thresholds = { ...thresholds, ...d.thresholds };
                     }
-                    if (d.sort_by && SORT_KEYS[d.sort_by]) {
-                        agentSortBy = d.sort_by;
-                        if (lastSnapshot) updateProcesses(lastSnapshot);
+                    if (Number(d.refresh_interval) > 0) {
+                        refreshInterval = Number(d.refresh_interval);
                     }
+                    healthLoaded = true;
+                    if (d.sort_keys && typeof d.sort_keys === "object" && !Array.isArray(d.sort_keys)) {
+                        agentSortSpecs = d.sort_keys;
+                    }
+                    if (d.sort_by && agentSortSpecs[d.sort_by]) {
+                        agentSortBy = d.sort_by;
+                        // Show the agent's ranking as the active sort, unless
+                        // the user has already picked a column.
+                        if (sortKey === null) {
+                            sortKey = d.sort_by;
+                            sortAsc = !agentSortSpecs[d.sort_by].descending;
+                        }
+                    }
+                    if (lastSnapshot) updateProcesses(lastSnapshot);
                     // Server default only applies when the user has no saved choice.
-                    if (!localStorage.getItem("theme") && d.theme === "light") {
-                        document.body.classList.add("light-theme");
-                        updateChartTheme();
+                    if (!safeStorage.get("localStorage", "theme") && d.theme === "light") {
+                        applyTheme(true);
                     }
                 })
                 .catch(() => {});
         };
 
-        ws.onmessage = (event) => {
+        socket.onmessage = (event) => {
+            let snap;
             try {
-                const snap = JSON.parse(event.data);
-                // First frame = the key was accepted. Setting this in onopen
-                // meant a first-attempt wrong key got the "your key may have
-                // changed" message meant for a rotated one.
-                if (!hadSuccessfulAuth) {
-                    hadSuccessfulAuth = true;
-                    const badge = document.getElementById("status-badge");
-                    badge.textContent = "Live";
-                    badge.title = "";
-                    badge.classList.add("connected");
-                }
-                lastSnapshot = snap;
-                updateHeader(snap);
-                updateCpu(snap);
-                updateMemory(snap);
-                updateNetwork(snap);
-                updateDisk(snap);
-                updateSensors(snap);
-                updateUsers(snap);
-                updateContainers(snap);
-                updateProcesses(snap);
-                document.body.classList.remove("loading");
-                document.getElementById("last-update").textContent =
-                    "Last update: " + new Date().toLocaleTimeString();
+                snap = JSON.parse(event.data);
             } catch (err) {
                 console.error("Failed to parse snapshot:", err);
+                return;
             }
+            // First frame on this connection = the key was accepted. Setting
+            // this in onopen meant a wrong key flashed "Live" before the
+            // server rejected it.
+            if (!receivedFrame) {
+                receivedFrame = true;
+                // Page-wide: picks the 4001 message ("may have changed" vs
+                // "not accepted") for any later rejection.
+                hadSuccessfulAuth = true;
+                const badge = document.getElementById("status-badge");
+                badge.textContent = "Live";
+                badge.title = "";
+                badge.classList.add("connected");
+                showToast("");
+                // Start the stale clock even if this frame repeats the last
+                // snapshot seen before a reconnect.
+                lastAdvanceMs = Date.now();
+            }
+            if (snap.timestamp !== lastSnapshotTimestamp) {
+                lastSnapshotTimestamp = snap.timestamp;
+                lastAdvanceMs = Date.now();
+                setStale(false);
+            }
+            lastSnapshot = snap;
+            // Each card on its own: one malformed field used to throw out of
+            // the whole handler and leave every later card on stale data.
+            for (const update of CARD_UPDATES) {
+                try {
+                    update(snap);
+                } catch (err) {
+                    console.error(`Failed to render ${update.name}:`, err);
+                }
+            }
+            document.body.classList.remove("loading");
+            // When the agent collected it — not when it arrived, which looks
+            // fresh even while the agent keeps resending an old snapshot.
+            const collected = Number(snap.timestamp) > 0 ? new Date(snap.timestamp * 1000) : new Date();
+            document.getElementById("last-update").textContent =
+                "Last update: " + collected.toLocaleTimeString();
         };
 
-        ws.onclose = (event) => {
+        socket.onclose = (event) => {
+            // Disconnected supersedes stale; the next connection starts fresh.
+            setStale(false);
+            lastAdvanceMs = 0;
             const badge = document.getElementById("status-badge");
             badge.classList.remove("connected");
             document.body.classList.add("disconnected");
 
             if (event.code === 4001) {
                 badge.textContent = "Auth Required";
+                showToast("");
                 clearKey();
                 reconnectAttempts = 0;
                 showAuthModal(
@@ -1057,78 +1179,91 @@
                         : "That API key was not accepted."
                 );
             } else if (event.code === 1013) {
-                badge.textContent = "Server Busy";
-                scheduleReconnect(badge);
+                scheduleReconnect(badge, "Server busy");
             } else {
                 scheduleReconnect(badge);
             }
         };
 
-        ws.onerror = () => {
-            ws.close();
+        socket.onerror = () => {
+            socket.close();
         };
     }
 
     // ── Clock ───────────────────────────────────────────────────────────
+    // The stream counts as stale when the snapshot hasn't advanced for three
+    // refresh intervals (at least 5 s): frames that keep arriving with the
+    // same snapshot mean the agent's collection is stuck, and "Live" would lie.
+    function staleAfterMs() {
+        return Math.max(3 * refreshInterval, 5) * 1000;
+    }
+
+    function setStale(isStale) {
+        if (isStale === stale) return;
+        stale = isStale;
+        document.body.classList.toggle("stale", isStale);
+        const badge = document.getElementById("status-badge");
+        if (!badge) return;
+        badge.classList.toggle("stale", isStale);
+        badge.classList.toggle("connected", !isStale);
+        if (isStale) {
+            const seconds = Math.round((Date.now() - lastAdvanceMs) / 1000);
+            badge.textContent = "Stale";
+            badge.title = `No new data for ${seconds}s — the agent may be stuck collecting.`;
+        } else {
+            badge.textContent = "Live";
+            badge.title = "";
+        }
+    }
+
     setInterval(() => {
         document.getElementById("clock").textContent = new Date().toLocaleTimeString();
+        if (lastAdvanceMs && Date.now() - lastAdvanceMs >= staleAfterMs()) {
+            setStale(true);
+        }
     }, 1000);
 
     // ── Theme Management ────────────────────────────────────────────────
+    // theme-init.js has already applied a saved choice before first paint;
+    // this keeps the charts and the toggle's state in step with the body.
     function updateChartTheme() {
-        const isLight = document.body.classList.contains("light-theme");
-        const gridColor = isLight ? "rgba(0, 0, 0, 0.06)" : "rgba(255, 255, 255, 0.04)";
-        const tickColor = isLight ? "#64748b" : "#5a6785";
-
-        // The dataset lines were fixed dark-theme colours, so #00d2ff sat at
-        // roughly 1.3:1 on the light card while the axes around it flipped.
-        const lineColors = isLight
-            ? { cpu: "#0369a1", mem: "#7c3aed", sent: "#0369a1", recv: "#0f766e" }
-            : { cpu: "#00d2ff", mem: "#c084fc", sent: "#00d2ff", recv: "#64ffda" };
-        if (cpuChart) cpuChart.data.datasets[0].borderColor = lineColors.cpu;
-        if (memChart) memChart.data.datasets[0].borderColor = lineColors.mem;
-        if (netChart) {
-            netChart.data.datasets[0].borderColor = lineColors.sent;
-            netChart.data.datasets[1].borderColor = lineColors.recv;
-        }
-
-        [cpuChart, memChart, netChart].forEach((chart) => {
-            if (!chart) return;
-            chart.options.scales.y.grid.color = gridColor;
-            chart.options.scales.y.ticks.color = tickColor;
-            chart.options.plugins.tooltip.backgroundColor = isLight ? "rgba(255, 255, 255, 0.95)" : "rgba(20, 27, 45, 0.95)";
-            chart.options.plugins.tooltip.bodyColor = isLight ? "#1e293b" : "#e6f1ff";
-            chart.options.plugins.tooltip.borderColor = isLight ? "rgba(0, 0, 0, 0.1)" : "rgba(0, 210, 255, 0.3)";
+        const palette = chartPalette();
+        CHART_SERIES.forEach((series, chart) => {
+            series.forEach((name, i) => {
+                chart.data.datasets[i].borderColor = palette[name];
+                chart.data.datasets[i].backgroundColor = palette[name + "Fill"];
+            });
+            chart.options.scales.y.grid.color = palette.grid;
+            chart.options.scales.y.ticks.color = palette.tick;
+            Object.assign(chart.options.plugins.tooltip, tooltipOptions(palette));
             if (chart.options.plugins.legend.labels) {
-                chart.options.plugins.legend.labels.color = tickColor;
+                chart.options.plugins.legend.labels.color = palette.legend;
             }
             chart.update();
         });
     }
 
     const themeBtn = document.getElementById("theme-toggle");
+
+    function applyTheme(isLight) {
+        document.body.classList.toggle("light-theme", isLight);
+        if (themeBtn) themeBtn.setAttribute("aria-pressed", String(isLight));
+        updateChartTheme();
+    }
+
     if (themeBtn) {
         themeBtn.addEventListener("click", () => {
-            document.body.classList.toggle("light-theme");
-            const isLight = document.body.classList.contains("light-theme");
-            localStorage.setItem("theme", isLight ? "light" : "dark");
-            updateChartTheme();
+            const isLight = !document.body.classList.contains("light-theme");
+            safeStorage.set("localStorage", "theme", isLight ? "light" : "dark");
+            applyTheme(isLight);
         });
-
-        // Restore saved theme on load (applied to body class in HTML, but update charts)
-        const savedTheme = localStorage.getItem("theme");
-        if (savedTheme === "light") {
-            document.body.classList.add("light-theme");
-        }
     }
 
     // ── Init ────────────────────────────────────────────────────────────
-    cpuChart = createChart("cpu-chart", "CPU %", "#00d2ff", "rgba(0, 210, 255, 0.1)");
-    memChart = createChart("mem-chart", "Memory %", "#c084fc", "rgba(192, 132, 252, 0.1)");
+    cpuChart = createPercentChart("cpu-chart", "CPU %", "cpu");
+    memChart = createPercentChart("mem-chart", "Memory %", "mem");
     netChart = createNetChart("net-chart");
-    if (document.body.classList.contains("light-theme")) {
-        updateChartTheme();
-    }
+    applyTheme(document.body.classList.contains("light-theme"));
     const authForm = document.getElementById("auth-form");
     if (authForm) {
         authForm.addEventListener("submit", (e) => {

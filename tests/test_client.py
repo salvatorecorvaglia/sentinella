@@ -1,6 +1,9 @@
+import asyncio
 import dataclasses
+from unittest.mock import patch
 
 import pytest
+from loopback_client import TestClient
 
 from sentinella.core.models import SystemSnapshot
 from sentinella.remote.client import RemoteCollector
@@ -66,7 +69,6 @@ def test_client_parse_robustness():
 
 
 def test_remote_collector_integration(mock_config):
-    from fastapi.testclient import TestClient
 
     app = create_remote_app(mock_config)
     client = RemoteCollector(address="http://localhost:9090")
@@ -98,7 +100,7 @@ async def test_remote_collector_integration_async(mock_config):
 
 
 def test_remote_collector_auth_failure_propagation():
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
 
     import httpx
 
@@ -119,7 +121,7 @@ def test_remote_collector_auth_failure_propagation():
 
 @pytest.mark.asyncio
 async def test_remote_collector_auth_failure_propagation_async():
-    from unittest.mock import MagicMock, patch
+    from unittest.mock import MagicMock
 
     import httpx
 
@@ -136,3 +138,85 @@ async def test_remote_collector_auth_failure_propagation_async():
     with patch("httpx.AsyncClient.get", return_value=mock_resp):
         with pytest.raises(httpx.HTTPStatusError):
             await client.collect_async()
+
+
+# ── C5: RemoteCollector must not leak its async client ───────────────────────
+
+
+@pytest.mark.asyncio
+async def test_remote_collector_close_async_releases_async_client():
+    client = RemoteCollector("http://localhost:9090")
+    await client._get_async_client()
+    assert client._async_client is not None
+    await client.close_async()
+    assert client._async_client is None
+
+
+def test_remote_collector_sync_close_also_releases_async_client():
+    """The TUI drives collect_async but tears down via close()."""
+    import asyncio
+
+    client = RemoteCollector("http://localhost:9090")
+    asyncio.run(client._get_async_client())
+    assert client._async_client is not None
+    client.close()
+    assert client._async_client is None
+
+
+def test_remote_collector_close_is_idempotent():
+    client = RemoteCollector("http://localhost:9090")
+    client.close()
+    client.close()
+
+
+@pytest.mark.asyncio
+async def test_remote_collector_close_from_running_loop_still_releases_client():
+    """close() called synchronously from inside a running event loop used to
+    drop the AsyncClient reference without ever calling aclose() on it — a
+    real connection-pool leak. It must now schedule the cleanup instead."""
+    client = RemoteCollector("http://localhost:9090")
+    await client._get_async_client()
+    async_client = client._async_client
+    assert async_client is not None
+
+    client.close()  # called from within this running loop
+    assert client._async_client is None
+    assert client._pending_close_tasks  # cleanup was scheduled, not dropped
+
+    await asyncio.gather(*client._pending_close_tasks)
+    assert async_client.is_closed
+
+
+def test_remote_collector_asks_for_the_full_snapshot():
+    """Without ?full=true a remote `sentinella print` would silently export a
+    truncated, cmdline-less list while a local run exported everything."""
+    import httpx
+
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["url"] = str(request.url)
+        return httpx.Response(200, json={"timestamp": 1.0, "processes": []})
+
+    collector = RemoteCollector("127.0.0.1:9090")
+    collector._client = httpx.Client(transport=httpx.MockTransport(handler))
+    try:
+        collector.collect()
+    finally:
+        collector.close()
+    assert "full=true" in seen["url"]
+
+
+def test_remote_collector_reports_unknown_modules_as_none():
+    import httpx
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"detail": "not enabled"})
+
+    remote = RemoteCollector("127.0.0.1:9090")
+    remote._async_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    try:
+        result = asyncio.run(remote.collect_module_async("sensors"))
+    finally:
+        remote.close()
+    assert result is None

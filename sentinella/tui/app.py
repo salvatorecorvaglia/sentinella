@@ -19,6 +19,7 @@ from textual.widgets import Footer
 
 from sentinella.config import SentinellaConfig
 from sentinella.core.collector import Collector
+from sentinella.core.constants import PROCESS_SORT_ORDER
 from sentinella.core.models import SystemSnapshot
 from sentinella.core.protocols import MetricCollector
 from sentinella.tui.widgets.container_widget import ContainerWidget
@@ -32,8 +33,8 @@ from sentinella.tui.widgets.sensor_widget import SensorWidget
 
 log = logging.getLogger(__name__)
 
-# Sort cycle for processes
-_SORT_CYCLE = ["cpu", "memory", "pid", "name"]
+# The `p` key's sort cycle: every processes.sort_by value, in order.
+_SORT_CYCLE = PROCESS_SORT_ORDER
 
 CSS_PATH = Path(__file__).parent / "dashboard.tcss"
 
@@ -48,8 +49,8 @@ class SentinellaApp(App):
         Binding("q", "quit", "Quit", priority=True),
         Binding("r", "refresh", "Refresh"),
         Binding("p", "cycle_sort", "Sort procs"),
-        # The web dashboard has had a runtime theme toggle since 1.3.0; the TUI
-        # could only be re-themed by editing sentinella.toml and restarting.
+        # Mirrors the web dashboard's theme toggle. Session-only: general.theme
+        # in sentinella.toml stays the default (see action_toggle_theme).
         Binding("t", "toggle_theme", "Theme"),
     ]
 
@@ -57,6 +58,7 @@ class SentinellaApp(App):
         self,
         collector: MetricCollector | None = None,
         config: SentinellaConfig | None = None,
+        startup_warnings: list[str] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -72,6 +74,9 @@ class SentinellaApp(App):
         # Tracks whether the last tick failed, so a persistent failure notifies
         # once rather than on every tick.
         self._collection_failing = False
+        # Problems found before the app existed (e.g. a background server
+        # whose port was taken), shown once the screen is up.
+        self._startup_warnings = list(startup_warnings or [])
 
     def compose(self) -> ComposeResult:
         with Container(id="dashboard"):
@@ -90,6 +95,9 @@ class SentinellaApp(App):
         # dashboard.tcss uses design tokens ($surface, $accent, …), so setting
         # the theme here repaints the whole dashboard.
         self.theme = "textual-light" if self._config.general.theme == "light" else "textual-dark"
+
+        for message in self._startup_warnings:
+            self.notify(message, severity="error", timeout=10)
 
         interval = self._config.general.refresh_interval
         self.set_interval(interval, self._tick)
@@ -140,22 +148,19 @@ class SentinellaApp(App):
         The snapshot's process list is truncated by the plugin using
         ``config.processes.sort_by``. When the user cycles to a different
         sort with `p`, re-sorting that already-truncated slice can hide a
-        process that would rank in range under the new key. Only local
-        ``Collector`` instances support the on-demand re-collect this needs
-        (``RemoteCollector`` has no way to ask the remote agent for a
-        different sort); other collectors fall back to the old best-effort
-        re-sort in ``ProcessTable``.
+        process that would rank in range under the new key. A collector that
+        can't re-rank (a remote agent) returns ``None``, and ``ProcessTable``
+        falls back to re-sorting the slice it has.
         """
         active_sort = _SORT_CYCLE[self._sort_index]
         if active_sort == self._config.processes.sort_by:
             return snap
-        collect_processes_async = getattr(self._collector, "collect_processes_async", None)
-        if collect_processes_async is None:
-            return snap
         try:
-            procs = await collect_processes_async(active_sort)
+            procs = await self._collector.collect_processes_async(active_sort)
         except Exception:
             log.debug("Failed to refresh processes for sort=%s", active_sort, exc_info=True)
+            return snap
+        if procs is None:
             return snap
         return dataclasses.replace(snap, processes=procs)
 
@@ -174,7 +179,7 @@ class SentinellaApp(App):
         disk.update_data(snap)
 
         net: NetworkWidget = self.query_one("#network-panel", NetworkWidget)
-        net.update_data(snap, refresh_interval=self._config.general.refresh_interval)
+        net.update_data(snap)
 
         sensor: SensorWidget = self.query_one("#sensor-panel", SensorWidget)
         sensor.update_data(snap)
@@ -219,8 +224,4 @@ class SentinellaApp(App):
         ``collect_async()``, so for a ``RemoteCollector`` it is the *async*
         HTTP client that holds open connections.
         """
-        close_async = getattr(self._collector, "close_async", None)
-        if close_async is not None:
-            await close_async()
-        else:
-            self._collector.close()
+        await self._collector.close_async()

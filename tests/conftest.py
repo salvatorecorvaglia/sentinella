@@ -9,6 +9,7 @@ from sentinella.config import (
     SentinellaConfig,
     WebConfig,
 )
+from sentinella.core.constants import MODULE_NAMES
 from sentinella.core.models import (
     BatteryInfo,
     ContainerMetrics,
@@ -26,7 +27,10 @@ from sentinella.core.models import (
 
 
 class MockMetricCollector:
-    """Minimal MetricCollector that replays a fixed snapshot."""
+    """A complete MetricCollector that replays a fixed snapshot."""
+
+    active_modules = MODULE_NAMES
+    last_collected_at = 0.0
 
     def __init__(self, snapshot):
         self.snapshot = snapshot
@@ -36,6 +40,15 @@ class MockMetricCollector:
 
     async def collect_async(self):
         return self.snapshot
+
+    async def collect_module_async(self, name):
+        return getattr(self.snapshot, name, None)
+
+    def set_collect_cmdline(self, enabled):
+        pass
+
+    async def collect_processes_async(self, sort_by):
+        return None  # like a remote agent: can't re-rank on demand
 
     def close(self):
         pass

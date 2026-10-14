@@ -26,20 +26,6 @@ _BUILTIN_PLUGINS = sorted(
 )
 
 
-# Map plugin names → module config field names
-_NAME_TO_CONFIG = {
-    "cpu": "cpu",
-    "memory": "memory",
-    "disk": "disk",
-    "network": "network",
-    "processes": "processes",
-    "users": "users",
-    "sensors": "sensors",
-    "containers": "containers",
-    "system_info": None,  # always enabled — lightweight
-}
-
-
 def _load_plugin_module(module_name: str) -> type[MonitorPlugin] | None:
     """Import a plugin module and return the ``MonitorPlugin`` class it defines.
 
@@ -82,12 +68,11 @@ def get_enabled_plugins(config: SentinellaConfig) -> list[MonitorPlugin]:
     plugins: list[MonitorPlugin] = []
 
     for mod_name in _BUILTIN_PLUGINS:
-        # Check if the module is enabled in config
-        config_key = _NAME_TO_CONFIG.get(mod_name)
-        if config_key is not None:
-            if not getattr(config.modules, config_key, True):
-                log.debug("Plugin %s disabled by config", mod_name)
-                continue
+        # [modules] switches are named after the plugin module. A plugin with
+        # no switch (system_info — cheap, and the header needs it) is always on.
+        if not getattr(config.modules, mod_name, True):
+            log.debug("Plugin %s disabled by config", mod_name)
+            continue
 
         cls = _load_plugin_module(mod_name)
         if cls is None:

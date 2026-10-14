@@ -16,14 +16,15 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from sentinella.config import SentinellaConfig, load_config
-from sentinella.core.api import create_base_app, warn_open_bind
 from sentinella.core.collector import Collector
+from sentinella.core.protocols import MetricCollector
+from sentinella.server.api import create_base_app, warn_open_bind
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
 
 def create_app(
-    config: SentinellaConfig | None = None, collector: Collector | None = None
+    config: SentinellaConfig | None = None, collector: MetricCollector | None = None
 ) -> FastAPI:
     """Create and configure the FastAPI web dashboard application."""
     cfg = config or load_config()
@@ -43,6 +44,11 @@ def create_app(
         api_key=api_key,
         skip_auth_paths=frozenset({"/", "/static"}),
         owns_collector=owns_collector,
+        bind_host=cfg.web.host,
+        allowed_hosts=cfg.web.allowed_hosts,
+        # A browser dashboard never needs command lines, whatever the
+        # remote agent is configured to share.
+        expose_cmdline=False,
     )
 
     # ── Static files ─────────────────────────────────────────────────

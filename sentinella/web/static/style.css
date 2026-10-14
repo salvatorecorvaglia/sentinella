@@ -43,6 +43,25 @@
     --card-hover-border: rgba(0, 210, 255, 0.2);
     --card-hover-shadow: rgba(0, 210, 255, 0.08);
 
+    /* Chart.js paints on a canvas, so it can't use these through CSS; app.js
+       reads them with getComputedStyle and re-reads them on a theme switch.
+       Plain values only: a var() inside would reach the canvas unresolved. */
+    --chart-cpu: #00d2ff;
+    --chart-cpu-fill: rgba(0, 210, 255, 0.1);
+    --chart-mem: #c084fc;
+    --chart-mem-fill: rgba(192, 132, 252, 0.1);
+    --chart-sent: #00d2ff;
+    --chart-sent-fill: rgba(0, 210, 255, 0.08);
+    --chart-recv: #64ffda;
+    --chart-recv-fill: rgba(100, 255, 218, 0.08);
+    --chart-grid: rgba(255, 255, 255, 0.04);
+    --chart-tick: #5a6785;
+    --chart-legend: #8892b0;
+    --chart-tooltip-bg: rgba(20, 27, 45, 0.95);
+    --chart-tooltip-title: #00d2ff;
+    --chart-tooltip-text: #e6f1ff;
+    --chart-tooltip-border: rgba(0, 210, 255, 0.3);
+
     --radius: 12px;
     --radius-sm: 8px;
     --glass-blur: 12px;
@@ -80,12 +99,35 @@ body.light-theme {
     --btn-ghost-hover: rgba(15, 23, 42, 0.06);
     --card-hover-border: rgba(2, 132, 199, 0.35);
     --card-hover-shadow: rgba(15, 23, 42, 0.10);
+    /* The dark lines (#00d2ff) sat at ~1.3:1 on the light card. */
+    --chart-cpu: #0369a1;
+    --chart-cpu-fill: rgba(3, 105, 161, 0.1);
+    --chart-mem: #7c3aed;
+    --chart-mem-fill: rgba(124, 58, 237, 0.1);
+    --chart-sent: #0369a1;
+    --chart-sent-fill: rgba(3, 105, 161, 0.08);
+    --chart-recv: #0f766e;
+    --chart-recv-fill: rgba(15, 118, 110, 0.08);
+    --chart-grid: rgba(0, 0, 0, 0.06);
+    --chart-tick: #64748b;
+    --chart-legend: #64748b;
+    --chart-tooltip-bg: rgba(255, 255, 255, 0.95);
+    --chart-tooltip-title: #0369a1;
+    --chart-tooltip-text: #1e293b;
+    --chart-tooltip-border: rgba(0, 0, 0, 0.1);
     background-image:
         radial-gradient(ellipse at 20% 50%, rgba(2, 132, 199, 0.05) 0%, transparent 50%),
         radial-gradient(ellipse at 80% 20%, rgba(16, 185, 129, 0.04) 0%, transparent 50%);
 }
 
 /* ── Reset & Base ───────────────────────────────────────────────────────── */
+/* Author rules such as `.modal-overlay { display: flex }` outrank the UA's
+   [hidden] rule, so restate it — app.js shows and hides by toggling `hidden`
+   because the CSP forbids inline style attributes. */
+[hidden] {
+    display: none !important;
+}
+
 *, *::before, *::after {
     box-sizing: border-box;
     margin: 0;
@@ -158,6 +200,17 @@ body {
 .badge.connected {
     background: rgba(100, 255, 218, 0.15);
     color: var(--accent-green);
+}
+
+/* Connected, but the snapshot has stopped advancing (see setStale in app.js). */
+.badge.stale {
+    background: rgba(255, 217, 61, 0.15);
+    color: var(--accent-amber);
+}
+
+body.stale #dashboard {
+    opacity: 0.85;
+    transition: opacity 0.3s ease;
 }
 
 .header-right {
@@ -702,8 +755,7 @@ body.disconnected #dashboard {
     opacity: 0.85;
     transition: opacity 0.3s ease;
 }
-body.disconnected::after {
-    content: "Connection lost. Reconnecting...";
+.conn-toast {
     position: fixed;
     bottom: 2rem;
     right: 2rem;

@@ -20,6 +20,7 @@ const STATIC = path.join(
 const html = readFileSync(path.join(STATIC, "index.html"), "utf8");
 const libSource = readFileSync(path.join(STATIC, "lib.js"), "utf8");
 const appSource = readFileSync(path.join(STATIC, "app.js"), "utf8");
+const themeInitSource = readFileSync(path.join(STATIC, "theme-init.js"), "utf8");
 
 /** Evaluate lib.js the way a browser does — no `module`, so it sets window. */
 function loadLibIntoWindow(win) {
@@ -90,6 +91,19 @@ describe("page markup", () => {
         expect(appSource).toContain("trapAuthModalFocus");
     });
 
+    it("uses no inline style attributes, which the CSP would block", () => {
+        // The server sends `style-src 'self'`, so a style="" attribute is
+        // silently dropped by the browser — jsdom does not enforce CSP, so
+        // this has to be asserted on the markup itself. `display: none` on
+        // the auth modal was ignored this way, flashing it on every load.
+        expect(html).not.toMatch(/\sstyle\s*=/i);
+    });
+
+    it("starts with the auth modal and its error line hidden", () => {
+        expect(document.getElementById("auth-modal").hidden).toBe(true);
+        expect(document.getElementById("auth-error").hidden).toBe(true);
+    });
+
     it("marks sortable columns as buttons and leaves Status alone", () => {
         const sortable = [...document.querySelectorAll("#process-table th[data-sort]")];
         expect(sortable.length).toBeGreaterThan(0);
@@ -150,5 +164,36 @@ describe("app.js / lib.js contract", () => {
                 ).toBe(false);
             }
         }
+    });
+});
+
+describe("theme-init.js", () => {
+    function runThemeInit(storage) {
+        document.documentElement.innerHTML = "<head></head><body></body>";
+        const ctx = { document, localStorage: storage };
+        vm.createContext(ctx);
+        vm.runInContext(themeInitSource, ctx);
+    }
+
+    it("applies a saved light theme synchronously, before anything paints", () => {
+        // Deferred to DOMContentLoaded or later, a light-theme user would see
+        // a dark flash; so the class must be on <body> the moment it has run.
+        runThemeInit({ getItem: (k) => (k === "theme" ? "light" : null) });
+        expect(document.body.classList.contains("light-theme")).toBe(true);
+    });
+
+    it("leaves the default dark theme alone", () => {
+        runThemeInit({ getItem: () => null });
+        expect(document.body.classList.contains("light-theme")).toBe(false);
+    });
+
+    it("survives storage that throws", () => {
+        const blocked = {
+            getItem() {
+                throw new DOMException("denied", "SecurityError");
+            },
+        };
+        expect(() => runThemeInit(blocked)).not.toThrow();
+        expect(document.body.classList.contains("light-theme")).toBe(false);
     });
 });

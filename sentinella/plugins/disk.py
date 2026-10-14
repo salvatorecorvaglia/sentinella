@@ -7,6 +7,41 @@ import psutil
 from sentinella.core.models import DiskIO, DiskMetrics, DiskPartition
 from sentinella.plugins.base import MonitorPlugin
 
+# Slow network filesystems and system pseudo-filesystems — never listed.
+_SKIPPED_FSTYPES = frozenset(
+    {
+        "nfs",
+        "nfs4",
+        "cifs",
+        "smbfs",
+        "vboxsf",
+        "sshfs",
+        "afpfs",
+        "davfs",
+        "gfs",
+        "gfs2",
+        "gpfs",
+        "lustre",
+        "tmpfs",
+        "devtmpfs",
+        "sysfs",
+        "proc",
+        "devpts",
+        "configfs",
+        "debugfs",
+        "securityfs",
+        "fusectl",
+        "pstore",
+        "bpf",
+        "cgroup",
+        "cgroup2",
+        "autofs",
+        "binfmt_misc",
+        "mqueue",
+        "hugetlbfs",
+    }
+)
+
 
 class DiskPlugin(MonitorPlugin):
     name = "disk"
@@ -19,44 +54,11 @@ class DiskPlugin(MonitorPlugin):
         partitions: list[DiskPartition] = []
         seen_devices: set[str] = set()
 
-        # Blocklist of slow network filesystems and system pseudo-filesystems
-        SKIPPED_FSTYPES = {
-            "nfs",
-            "nfs4",
-            "cifs",
-            "smbfs",
-            "vboxsf",
-            "sshfs",
-            "afpfs",
-            "davfs",
-            "gfs",
-            "gfs2",
-            "gpfs",
-            "lustre",
-            "tmpfs",
-            "devtmpfs",
-            "sysfs",
-            "proc",
-            "devpts",
-            "configfs",
-            "debugfs",
-            "securityfs",
-            "fusectl",
-            "pstore",
-            "bpf",
-            "cgroup",
-            "cgroup2",
-            "autofs",
-            "binfmt_misc",
-            "mqueue",
-            "hugetlbfs",
-        }
-
         for part in psutil.disk_partitions(all=False):
             # Skip duplicates and pseudo/network filesystems
             if part.device in seen_devices:
                 continue
-            if (part.fstype or "").lower() in SKIPPED_FSTYPES:
+            if (part.fstype or "").lower() in _SKIPPED_FSTYPES:
                 continue
             seen_devices.add(part.device)
 

@@ -50,7 +50,7 @@ def test_processes_plugin_sort_by_pid_is_ascending():
 def test_processes_plugin_reports_untruncated_total():
     plugin = ProcessesPlugin(SentinellaConfig(processes=ProcessesConfig(max_display=1)))
     procs = plugin.collect()
-    assert plugin.total_count >= len(procs)
+    assert procs.total >= len(procs)
 
 
 # ── U3: process_count is the host total, not the truncated length ────────────
@@ -124,19 +124,8 @@ async def test_tui_applies_dark_theme(mock_config, mock_collector):
         assert app.theme == "textual-dark"
 
 
-def test_tui_stylesheet_uses_design_tokens():
-    """Hardcoded hex would override the theme and defeat `general.theme`."""
-    import re
-    from pathlib import Path
-
-    css_path = Path(__file__).parent.parent / "sentinella/tui/dashboard.tcss"
-    css = css_path.read_text(encoding="utf-8")
-    assert not re.findall(r"#[0-9a-fA-F]{6}", css)
-    assert "$surface" in css
-
-
 def test_health_reports_configured_theme():
-    from fastapi.testclient import TestClient
+    from loopback_client import TestClient
 
     from sentinella.web.server import create_app
 
@@ -145,26 +134,11 @@ def test_health_reports_configured_theme():
         assert client.get("/health").json()["theme"] == "light"
 
 
-def test_theme_init_runs_before_paint():
-    """The theme script must not defer, or light-theme users see a dark flash.
-
-    Where it sits in the document is asserted in tests/web/dashboard.test.js,
-    which parses the page rather than searching it for substrings.
-    """
-    from pathlib import Path
-
-    static = Path(__file__).parent.parent / "sentinella/web/static"
-    script = (static / "theme-init.js").read_text(encoding="utf-8")
-
-    assert "DOMContentLoaded" not in script, "deferring the class defeats the purpose"
-    assert "document.body.classList.add" in script
-
-
 # ── M5 (web): the dashboard honours the agent's max_display ──────────────────
 
 
 def test_health_reports_max_display():
-    from fastapi.testclient import TestClient
+    from loopback_client import TestClient
 
     from sentinella.web.server import create_app
 
@@ -179,7 +153,7 @@ def test_dashboard_takes_its_process_limit_from_the_agent():
     Asserted through /health's contract rather than by grepping app.js for an
     expression, which broke whenever the line was reformatted.
     """
-    from fastapi.testclient import TestClient
+    from loopback_client import TestClient
 
     from sentinella.web.server import create_app
 
@@ -344,8 +318,8 @@ def test_cpu_widget_renders_sparkline():
     out = _render(
         CpuWidget(),
         [
-            SystemSnapshot(cpu=CpuMetrics(percent_overall=p, percent_per_core=[p]))
-            for p in (5, 90, 40)
+            SystemSnapshot(timestamp=t, cpu=CpuMetrics(percent_overall=p, percent_per_core=[p]))
+            for t, p in enumerate((5, 90, 40))
         ],
     )
     assert "History" in out
@@ -358,7 +332,10 @@ def test_memory_widget_renders_sparkline():
 
     out = _render(
         MemoryWidget(),
-        [SystemSnapshot(memory=MemoryMetrics(total=100, used=p, percent=p)) for p in (10, 80, 50)],
+        [
+            SystemSnapshot(timestamp=t, memory=MemoryMetrics(total=100, used=p, percent=p))
+            for t, p in enumerate((10, 80, 50))
+        ],
     )
     assert "Trend" in out
     assert any(ch in out for ch in "▂▃▄▅▆▇█")
@@ -504,7 +481,7 @@ def test_fallback_version_matches_pyproject():
 
 
 def test_health_reports_severity_thresholds():
-    from fastapi.testclient import TestClient
+    from loopback_client import TestClient
 
     from sentinella.core.utils import PERCENT_THRESHOLDS, TEMP_THRESHOLDS
     from sentinella.web.server import create_app
@@ -515,10 +492,69 @@ def test_health_reports_severity_thresholds():
     assert thresholds["temp"] == list(TEMP_THRESHOLDS)
 
 
-def test_dashboard_reads_thresholds_from_the_agent():
-    """The colouring rules themselves are covered in tests/web/lib.test.js;
-    this pins the wiring — the page must ask the agent rather than assume."""
-    from pathlib import Path
+# ── Forced refreshes must not distort rates or history ──────────────────────
 
-    js = (Path(__file__).parent.parent / "sentinella/web/static/app.js").read_text(encoding="utf-8")
-    assert "d.thresholds" in js, "the dashboard must read thresholds from /health"
+
+def _net_snap(ts, sent, recv):
+    from sentinella.core.models import NetworkInterface, NetworkMetrics
+
+    return SystemSnapshot(
+        timestamp=ts,
+        network=NetworkMetrics(
+            interfaces=[NetworkInterface(name="eth0", bytes_sent=sent, bytes_recv=recv)]
+        ),
+    )
+
+
+def test_network_rate_uses_the_time_between_snapshots():
+    """The rate divided by refresh_interval, so a refresh that arrived early
+    (the `r`/`t`/`p` keys) or late understated or overstated it."""
+    from sentinella.tui.widgets.network_widget import NetworkWidget
+
+    out = _render(NetworkWidget(), [_net_snap(100.0, 0, 0), _net_snap(101.0, 1000, 3000)])
+    assert "▲ 1000.0 B/s" in out
+    assert "▼ 2.9 KB/s" in out
+
+
+def test_network_rate_survives_a_repeated_snapshot():
+    """A forced refresh inside the collector's cache TTL returns the same
+    snapshot again; that used to render every interface as 0 B/s."""
+    from sentinella.tui.widgets.network_widget import NetworkWidget
+
+    second = _net_snap(101.0, 1000, 3000)
+    out = _render(NetworkWidget(), [_net_snap(100.0, 0, 0), second, second])
+    assert "▲ 1000.0 B/s" in out
+
+
+def test_sparkline_history_skips_a_repeated_snapshot():
+    from sentinella.core.models import CpuMetrics, MemoryMetrics
+    from sentinella.tui.widgets.cpu_widget import CpuWidget
+    from sentinella.tui.widgets.memory_widget import MemoryWidget
+
+    snap = SystemSnapshot(
+        timestamp=5.0, cpu=CpuMetrics(percent_overall=1.0), memory=MemoryMetrics(percent=1.0)
+    )
+    cpu, mem = CpuWidget(), MemoryWidget()
+    _render(cpu, [snap, snap])
+    _render(mem, [snap, snap])
+    assert len(cpu._history) == 1
+    assert len(mem._history) == 1
+
+
+def test_fetch_art_keeps_its_first_line_indented():
+    """str.strip() also ate the first row's leading spaces, shearing the logo."""
+    from sentinella.fetch import _art_lines
+
+    lines = _art_lines()
+    assert lines[0].startswith(" "), lines[0]
+    assert all(line.strip() for line in lines)
+
+
+def test_user_lists_keep_first_seen_order():
+    from sentinella.core.models import UserInfo
+    from sentinella.tui.widgets.sensor_widget import SensorWidget
+
+    names = ["zed", "amy", "zed", "mo"]
+    snap = SystemSnapshot(users=[UserInfo(name=n) for n in names])
+    out = _render(SensorWidget(), [snap])
+    assert "zed, amy, mo" in out

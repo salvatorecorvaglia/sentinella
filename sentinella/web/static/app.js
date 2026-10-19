@@ -3,7 +3,7 @@
    ───────────────────────────────────────────────────────────────────────── */
 
 (() => {
-    "use strict";
+    'use strict';
 
     // ── Constants ───────────────────────────────────────────────────────
     const MAX_HISTORY = 60;
@@ -21,14 +21,14 @@
     let cpuChart = null;
     let memChart = null;
     let netChart = null;
-    let cpuHistory = [];
-    let memHistory = [];
-    let netSentHistory = [];
-    let netRecvHistory = [];
+    const cpuHistory = [];
+    const memHistory = [];
+    const netSentHistory = [];
+    const netRecvHistory = [];
     let prevNetSent = 0;
     let prevNetRecv = 0;
     let prevNetTime = 0;
-    let prevIfaceData = {};
+    const prevIfaceData = {};
     // Previous disk counters and the rates derived from them (see updateDisk).
     let prevDisk = null;
     let diskRates = null;
@@ -59,8 +59,12 @@
     // Overridden from /health with the agent's DASHBOARD_LIMITS, so the cards
     // and the TUI panels truncate the same lists at the same point.
     let displayLimits = {
-        partitions: 5, interfaces: 5, temperatures: 6,
-        fans: 4, containers: 8, users: 5,
+        partitions: 5,
+        interfaces: 5,
+        temperatures: 6,
+        fans: 4,
+        containers: 8,
+        users: 5,
     };
     // Defaults only: /health ships the agent's real thresholds so this page
     // colours a reading exactly the way the TUI and `sentinella print` do, rather
@@ -71,8 +75,8 @@
     // module reads as "not monitored" rather than as a misleading zero.
     function applyModuleAvailability() {
         if (!activeModules) return;
-        document.querySelectorAll("[data-module]").forEach((card) => {
-            card.classList.toggle("module-disabled", !activeModules.includes(card.dataset.module));
+        document.querySelectorAll('[data-module]').forEach((card) => {
+            card.classList.toggle('module-disabled', !activeModules.includes(card.dataset.module));
         });
     }
 
@@ -88,21 +92,21 @@
         get(area, key) {
             try {
                 return window[area].getItem(key);
-            } catch (e) {
+            } catch (_e) {
                 return null;
             }
         },
         set(area, key, value) {
             try {
                 window[area].setItem(key, value);
-            } catch (e) {
+            } catch (_e) {
                 /* storage unavailable */
             }
         },
         remove(area, key) {
             try {
                 window[area].removeItem(key);
-            } catch (e) {
+            } catch (_e) {
                 /* storage unavailable */
             }
         },
@@ -111,25 +115,25 @@
     // Session-only by default: the key dies with the tab unless the user
     // explicitly opts into persisting it on this device.
     function storeKey(key, persist) {
-        safeStorage.set("sessionStorage", "sentinella_api_key", obfuscateKey(key));
+        safeStorage.set('sessionStorage', 'sentinella_api_key', obfuscateKey(key));
         if (persist) {
-            safeStorage.set("localStorage", "sentinella_api_key", obfuscateKey(key));
+            safeStorage.set('localStorage', 'sentinella_api_key', obfuscateKey(key));
         } else {
-            safeStorage.remove("localStorage", "sentinella_api_key");
+            safeStorage.remove('localStorage', 'sentinella_api_key');
         }
     }
 
     function loadKey() {
         return deobfuscateKey(
-            safeStorage.get("sessionStorage", "sentinella_api_key") ||
-                safeStorage.get("localStorage", "sentinella_api_key") ||
-                ""
+            safeStorage.get('sessionStorage', 'sentinella_api_key') ||
+                safeStorage.get('localStorage', 'sentinella_api_key') ||
+                '',
         );
     }
 
     function clearKey() {
-        safeStorage.remove("sessionStorage", "sentinella_api_key");
-        safeStorage.remove("localStorage", "sentinella_api_key");
+        safeStorage.remove('sessionStorage', 'sentinella_api_key');
+        safeStorage.remove('localStorage', 'sentinella_api_key');
     }
 
     // ── Shared pure helpers ─────────────────────────────────────────────
@@ -172,18 +176,18 @@
     // not inside it: the update functions compare container.children.length
     // against the data length to decide whether to rebuild the rows.
     function showMoreNote(listId, hidden, noun) {
-        const note = document.getElementById(listId + "-more");
+        const note = document.getElementById(listId + '-more');
         if (!note) return;
         if (hidden > 0) {
             note.textContent = `+${hidden} more ${noun}`;
             note.hidden = false;
         } else {
-            note.textContent = "";
+            note.textContent = '';
             note.hidden = true;
         }
     }
 
-    const EMPTY_LABELS = Array.from({ length: MAX_HISTORY }, () => "");
+    const EMPTY_LABELS = Array.from({ length: MAX_HISTORY }, () => '');
 
     function timeLabels() {
         return EMPTY_LABELS;
@@ -196,21 +200,21 @@
         const style = getComputedStyle(document.body);
         const token = (name) => style.getPropertyValue(`--chart-${name}`).trim();
         return {
-            cpu: token("cpu"),
-            cpuFill: token("cpu-fill"),
-            mem: token("mem"),
-            memFill: token("mem-fill"),
-            sent: token("sent"),
-            sentFill: token("sent-fill"),
-            recv: token("recv"),
-            recvFill: token("recv-fill"),
-            grid: token("grid"),
-            tick: token("tick"),
-            legend: token("legend"),
-            tooltipBg: token("tooltip-bg"),
-            tooltipTitle: token("tooltip-title"),
-            tooltipText: token("tooltip-text"),
-            tooltipBorder: token("tooltip-border"),
+            cpu: token('cpu'),
+            cpuFill: token('cpu-fill'),
+            mem: token('mem'),
+            memFill: token('mem-fill'),
+            sent: token('sent'),
+            sentFill: token('sent-fill'),
+            recv: token('recv'),
+            recvFill: token('recv-fill'),
+            grid: token('grid'),
+            tick: token('tick'),
+            legend: token('legend'),
+            tooltipBg: token('tooltip-bg'),
+            tooltipTitle: token('tooltip-title'),
+            tooltipText: token('tooltip-text'),
+            tooltipBorder: token('tooltip-border'),
         };
     }
 
@@ -242,7 +246,11 @@
         };
     }
 
-    function createChart(canvasId, datasets, { legend = false, formatTick = null, formatTooltip = null } = {}) {
+    function createChart(
+        canvasId,
+        datasets,
+        { legend = false, formatTick = null, formatTooltip = null } = {},
+    ) {
         const ctx = document.getElementById(canvasId);
         if (!ctx) return null;
         const palette = chartPalette();
@@ -251,7 +259,7 @@
         const ticks = { color: palette.tick, font: AXIS_FONT };
         if (formatTick) ticks.callback = formatTick;
         return new Chart(ctx, {
-            type: "line",
+            type: 'line',
             data: { labels: timeLabels(), datasets: datasets },
             options: {
                 responsive: true,
@@ -259,7 +267,10 @@
                 animation: { duration: 300 },
                 plugins: {
                     legend: legend
-                        ? { display: true, labels: { color: palette.legend, font: AXIS_FONT, boxWidth: 12 } }
+                        ? {
+                              display: true,
+                              labels: { color: palette.legend, font: AXIS_FONT, boxWidth: 12 },
+                          }
                         : { display: false },
                     tooltip: tooltip,
                 },
@@ -282,7 +293,7 @@
     function createPercentChart(canvasId, label, series) {
         const palette = chartPalette();
         const chart = createChart(canvasId, [
-            lineDataset(label, palette[series], palette[series + "Fill"]),
+            lineDataset(label, palette[series], palette[series + 'Fill']),
         ]);
         if (chart) CHART_SERIES.set(chart, [series]);
         return chart;
@@ -293,27 +304,27 @@
         const chart = createChart(
             canvasId,
             [
-                lineDataset("Sent", palette.sent, palette.sentFill),
-                lineDataset("Received", palette.recv, palette.recvFill),
+                lineDataset('Sent', palette.sent, palette.sentFill),
+                lineDataset('Received', palette.recv, palette.recvFill),
             ],
             {
                 legend: true,
                 formatTick: (v) => humanBytes(v),
-                formatTooltip: (ctx) => ctx.dataset.label + ": " + humanBytesRate(ctx.parsed.y),
-            }
+                formatTooltip: (ctx) => ctx.dataset.label + ': ' + humanBytesRate(ctx.parsed.y),
+            },
         );
-        if (chart) CHART_SERIES.set(chart, ["sent", "recv"]);
+        if (chart) CHART_SERIES.set(chart, ['sent', 'recv']);
         return chart;
     }
 
     // ── Update Functions ────────────────────────────────────────────────
     function updateHeader(snap) {
         const si = snap.system_info || {};
-        document.getElementById("hostname").textContent = si.hostname || "";
-        document.getElementById("os-info").textContent =
-            (si.os_name || "") + " " + (si.os_version || "") + " (" + (si.architecture || "") + ")";
-        document.getElementById("uptime").textContent = "⏱ " + formatUptime(si.uptime_seconds || 0);
-        document.getElementById("clock").textContent = new Date().toLocaleTimeString();
+        document.getElementById('hostname').textContent = si.hostname || '';
+        document.getElementById('os-info').textContent =
+            (si.os_name || '') + ' ' + (si.os_version || '') + ' (' + (si.architecture || '') + ')';
+        document.getElementById('uptime').textContent = '⏱ ' + formatUptime(si.uptime_seconds || 0);
+        document.getElementById('clock').textContent = new Date().toLocaleTimeString();
     }
 
     function updateCpu(snap) {
@@ -321,25 +332,29 @@
         const overall = cpu.percent_overall || 0;
 
         // Value
-        const el = document.getElementById("cpu-overall");
-        el.textContent = overall.toFixed(1) + "%";
-        el.className = "card-value " + classForPercent(overall);
+        const el = document.getElementById('cpu-overall');
+        el.textContent = overall.toFixed(1) + '%';
+        el.className = 'card-value ' + classForPercent(overall);
 
         // Details
-        document.getElementById("cpu-cores").textContent =
-            (cpu.core_count_physical || "?") + "P / " + (cpu.core_count_logical || "?") + "L";
-        document.getElementById("cpu-freq").textContent =
-            cpu.frequency_current_mhz ? cpu.frequency_current_mhz.toFixed(0) + " MHz" : "—";
+        document.getElementById('cpu-cores').textContent =
+            (cpu.core_count_physical || '?') + 'P / ' + (cpu.core_count_logical || '?') + 'L';
+        document.getElementById('cpu-freq').textContent = cpu.frequency_current_mhz
+            ? cpu.frequency_current_mhz.toFixed(0) + ' MHz'
+            : '—';
         // All three or none: a platform reporting a partial tuple would throw
         // on .toFixed() of null. Mirrors the same guard in cpu_widget.py.
-        const hasLoad =
-            cpu.load_avg_1 != null && cpu.load_avg_5 != null && cpu.load_avg_15 != null;
-        document.getElementById("cpu-load").textContent = hasLoad
-            ? cpu.load_avg_1.toFixed(2) + " / " + cpu.load_avg_5.toFixed(2) + " / " + cpu.load_avg_15.toFixed(2)
-            : "—";
+        const hasLoad = cpu.load_avg_1 != null && cpu.load_avg_5 != null && cpu.load_avg_15 != null;
+        document.getElementById('cpu-load').textContent = hasLoad
+            ? cpu.load_avg_1.toFixed(2) +
+              ' / ' +
+              cpu.load_avg_5.toFixed(2) +
+              ' / ' +
+              cpu.load_avg_15.toFixed(2)
+            : '—';
 
         // Core bars
-        const coreBars = document.getElementById("cpu-core-bars");
+        const coreBars = document.getElementById('cpu-core-bars');
         const cores = cpu.percent_per_core || [];
 
         // Rebuild containers if counts mismatch to avoid layout thrashing
@@ -351,16 +366,16 @@
                         <div class="core-bar-track"><div class="core-bar-fill"></div></div>
                     </div>`;
                 })
-                .join("");
+                .join('');
         }
 
         // Update in-place
         cores.forEach((pct, i) => {
             const safePct = Number(pct) || 0;
-            const fill = coreBars.children[i].querySelector(".core-bar-fill");
+            const fill = coreBars.children[i].querySelector('.core-bar-fill');
             if (fill) {
-                fill.style.width = safePct + "%";
-                fill.className = "core-bar-fill " + bgClassForPercent(safePct);
+                fill.style.width = safePct + '%';
+                fill.className = 'core-bar-fill ' + bgClassForPercent(safePct);
             }
         });
 
@@ -370,28 +385,28 @@
         if (cpuChart) {
             cpuChart.data.datasets[0].data = cpuHistory;
             cpuChart.options.scales.y.max = 100;
-            cpuChart.update("none");
+            cpuChart.update('none');
         }
     }
 
     function updateMemory(snap) {
         const mem = snap.memory || {};
 
-        const el = document.getElementById("mem-overall");
-        el.textContent = (mem.percent || 0).toFixed(1) + "%";
-        el.className = "card-value " + classForPercent(mem.percent || 0);
+        const el = document.getElementById('mem-overall');
+        el.textContent = (mem.percent || 0).toFixed(1) + '%';
+        el.className = 'card-value ' + classForPercent(mem.percent || 0);
 
-        document.getElementById("mem-used").textContent = humanBytes(mem.used || 0);
-        document.getElementById("mem-total").textContent = humanBytes(mem.total || 0);
-        document.getElementById("mem-avail").textContent = humanBytes(mem.available || 0);
+        document.getElementById('mem-used').textContent = humanBytes(mem.used || 0);
+        document.getElementById('mem-total').textContent = humanBytes(mem.total || 0);
+        document.getElementById('mem-avail').textContent = humanBytes(mem.available || 0);
 
         // Progress bars
-        const ramBar = document.getElementById("ram-bar");
-        ramBar.style.width = (mem.percent || 0) + "%";
+        const ramBar = document.getElementById('ram-bar');
+        ramBar.style.width = (mem.percent || 0) + '%';
         // The same crit threshold every other reading uses, from /health.
-        ramBar.classList.toggle("warn", (mem.percent || 0) >= thresholds.percent[1]);
+        ramBar.classList.toggle('warn', (mem.percent || 0) >= thresholds.percent[1]);
 
-        document.getElementById("swap-bar").style.width = (mem.swap_percent || 0) + "%";
+        document.getElementById('swap-bar').style.width = (mem.swap_percent || 0) + '%';
 
         // Chart
         memHistory.push(mem.percent || 0);
@@ -399,21 +414,21 @@
         if (memChart) {
             memChart.data.datasets[0].data = memHistory;
             memChart.options.scales.y.max = 100;
-            memChart.update("none");
+            memChart.update('none');
         }
     }
 
     function updateNetwork(snap) {
         const net = snap.network || {};
         // null = the agent's platform wouldn't say; not the same as zero.
-        const conns = net.connections_count == null ? "—" : net.connections_count;
-        document.getElementById("net-connections").textContent = conns + " conn";
+        const conns = net.connections_count == null ? '—' : net.connections_count;
+        document.getElementById('net-connections').textContent = conns + ' conn';
 
         const allInterfaces = net.interfaces || [];
         const interfaces = allInterfaces
-            .filter((i) => !i.name.startsWith("lo"))
+            .filter((i) => !i.name.startsWith('lo'))
             .slice(0, displayLimits.interfaces);
-        const container = document.getElementById("net-interfaces");
+        const container = document.getElementById('net-interfaces');
 
         // Forget interfaces that have gone away, or VPN/tether churn grows this
         // map for the life of the tab. Ported from NetworkWidget, which already
@@ -428,10 +443,12 @@
         let totalRecv = 0;
         // Every non-loopback interface, not just the listed ones: the chart is
         // host throughput, so truncating the list must not change it.
-        allInterfaces.filter((i) => !i.name.startsWith("lo")).forEach((iface) => {
-            totalSent += iface.bytes_sent || 0;
-            totalRecv += iface.bytes_recv || 0;
-        });
+        allInterfaces
+            .filter((i) => !i.name.startsWith('lo'))
+            .forEach((iface) => {
+                totalSent += iface.bytes_sent || 0;
+                totalRecv += iface.bytes_recv || 0;
+            });
 
         // Chart in bytes/second — the tooltip and axis both label it "/s",
         // so the delta must be divided by the time actually elapsed rather
@@ -452,7 +469,7 @@
         if (netChart && netSentHistory.length > 0) {
             netChart.data.datasets[0].data = netSentHistory;
             netChart.data.datasets[1].data = netRecvHistory;
-            netChart.update("none");
+            netChart.update('none');
         }
 
         // Interface list - update in-place
@@ -465,16 +482,16 @@
                         <span class="iface-addr"></span>
                     </div>`;
                 })
-                .join("");
+                .join('');
         }
 
         interfaces.forEach((iface, i) => {
             const row = container.children[i];
-            const nameEl = row.querySelector(".iface-name");
-            const rateEl = row.querySelector(".iface-rate");
-            const addrEl = row.querySelector(".iface-addr");
+            const nameEl = row.querySelector('.iface-name');
+            const rateEl = row.querySelector('.iface-rate');
+            const addrEl = row.querySelector('.iface-addr');
 
-            const addr = iface.addrs && iface.addrs.length > 0 ? iface.addrs[0] : "—";
+            const addr = iface.addrs && iface.addrs.length > 0 ? iface.addrs[0] : '—';
             const name = iface.name;
 
             // Compute rates
@@ -490,7 +507,7 @@
             prevIfaceData[name] = {
                 sent: iface.bytes_sent,
                 recv: iface.bytes_recv,
-                time: now
+                time: now,
             };
 
             nameEl.textContent = name;
@@ -498,14 +515,14 @@
             addrEl.textContent = addr;
         });
 
-        const shownNonLo = allInterfaces.filter((i) => !i.name.startsWith("lo")).length;
-        showMoreNote("net-interfaces", shownNonLo - interfaces.length, "interfaces");
+        const shownNonLo = allInterfaces.filter((i) => !i.name.startsWith('lo')).length;
+        showMoreNote('net-interfaces', shownNonLo - interfaces.length, 'interfaces');
     }
 
     function updateDisk(snap) {
         const disk = snap.disk || {};
         const partitions = (disk.partitions || []).slice(0, displayLimits.partitions);
-        const container = document.getElementById("disk-partitions");
+        const container = document.getElementById('disk-partitions');
 
         // Partitions list - update in-place
         if (container.children.length !== partitions.length) {
@@ -520,29 +537,31 @@
                         <span class="partition-size"></span>
                     </div>`;
                 })
-                .join("");
+                .join('');
         }
 
         partitions.forEach((p, i) => {
             const row = container.children[i];
-            const mountEl = row.querySelector(".partition-mount");
-            const fillEl = row.querySelector(".partition-bar-fill");
-            const pctEl = row.querySelector(".partition-pct");
-            const sizeEl = row.querySelector(".partition-size");
+            const mountEl = row.querySelector('.partition-mount');
+            const fillEl = row.querySelector('.partition-bar-fill');
+            const pctEl = row.querySelector('.partition-pct');
+            const sizeEl = row.querySelector('.partition-size');
 
             const safePct = Number(p.percent) || 0;
 
             mountEl.textContent = p.mountpoint;
             mountEl.title = p.mountpoint; // ellipsized in CSS; full path on hover
-            fillEl.style.width = safePct + "%";
-            fillEl.className = "partition-bar-fill " + bgClassForPercent(safePct);
-            pctEl.textContent = safePct.toFixed(1) + "%";
-            pctEl.className = "partition-pct " + classForPercent(safePct);
+            fillEl.style.width = safePct + '%';
+            fillEl.className = 'partition-bar-fill ' + bgClassForPercent(safePct);
+            pctEl.textContent = safePct.toFixed(1) + '%';
+            pctEl.className = 'partition-pct ' + classForPercent(safePct);
             sizeEl.textContent = `${humanBytes(p.used || 0)} / ${humanBytes(p.total || 0)}`;
         });
 
         showMoreNote(
-            "disk-partitions", (disk.partitions || []).length - partitions.length, "partitions"
+            'disk-partitions',
+            (disk.partitions || []).length - partitions.length,
+            'partitions',
         );
 
         // The counters are totals since boot; shown bare, beside live bars,
@@ -563,12 +582,12 @@
         }
         if (!prevDisk || current.time > prevDisk.time) prevDisk = current;
 
-        const readEl = document.getElementById("disk-read");
-        const writeEl = document.getElementById("disk-write");
-        readEl.textContent = diskRates ? humanBytesRate(diskRates.read) : "—";
-        writeEl.textContent = diskRates ? humanBytesRate(diskRates.write) : "—";
-        readEl.title = "Read since boot: " + humanBytes(current.read);
-        writeEl.title = "Written since boot: " + humanBytes(current.write);
+        const readEl = document.getElementById('disk-read');
+        const writeEl = document.getElementById('disk-write');
+        readEl.textContent = diskRates ? humanBytesRate(diskRates.read) : '—';
+        writeEl.textContent = diskRates ? humanBytesRate(diskRates.write) : '—';
+        readEl.title = 'Read since boot: ' + humanBytes(current.read);
+        writeEl.title = 'Written since boot: ' + humanBytes(current.write);
     }
 
     function updateSensors(snap) {
@@ -576,10 +595,10 @@
 
         // Temperatures
         const temps = (sensors.temperatures || []).slice(0, displayLimits.temperatures);
-        const tempContainer = document.getElementById("temp-list");
+        const tempContainer = document.getElementById('temp-list');
         if (temps.length) {
-            let header = tempContainer.querySelector(".sensor-section-header");
-            if (!header || tempContainer.children.length !== (temps.length + 1)) {
+            const header = tempContainer.querySelector('.sensor-section-header');
+            if (!header || tempContainer.children.length !== temps.length + 1) {
                 let html = `<div class="sensor-section-header">Temperatures</div>`;
                 temps.forEach(() => {
                     html += `<div class="sensor-row">
@@ -592,26 +611,28 @@
 
             temps.forEach((t, i) => {
                 const row = tempContainer.children[i + 1];
-                const labelEl = row.querySelector(".sensor-label");
-                const valEl = row.querySelector(".sensor-value");
+                const labelEl = row.querySelector('.sensor-label');
+                const valEl = row.querySelector('.sensor-value');
 
                 labelEl.textContent = t.label;
-                valEl.textContent = t.current.toFixed(0) + "°C";
-                valEl.className = "sensor-value " + classForTemp(t.current, t.high, t.critical);
+                valEl.textContent = t.current.toFixed(0) + '°C';
+                valEl.className = 'sensor-value ' + classForTemp(t.current, t.high, t.critical);
             });
         } else {
-            tempContainer.innerHTML = "";
+            tempContainer.innerHTML = '';
         }
         showMoreNote(
-            "temp-list", (sensors.temperatures || []).length - temps.length, "temperatures"
+            'temp-list',
+            (sensors.temperatures || []).length - temps.length,
+            'temperatures',
         );
 
         // Fans
         const fans = (sensors.fans || []).slice(0, displayLimits.fans);
-        const fanContainer = document.getElementById("fan-list");
+        const fanContainer = document.getElementById('fan-list');
         if (fans.length) {
-            let header = fanContainer.querySelector(".sensor-section-header");
-            if (!header || fanContainer.children.length !== (fans.length + 1)) {
+            const header = fanContainer.querySelector('.sensor-section-header');
+            if (!header || fanContainer.children.length !== fans.length + 1) {
                 let html = `<div class="sensor-section-header">Fans</div>`;
                 fans.forEach(() => {
                     html += `<div class="sensor-row">
@@ -624,22 +645,22 @@
 
             fans.forEach((f, i) => {
                 const row = fanContainer.children[i + 1];
-                const labelEl = row.querySelector(".sensor-label");
-                const valEl = row.querySelector(".sensor-value");
+                const labelEl = row.querySelector('.sensor-label');
+                const valEl = row.querySelector('.sensor-value');
 
                 labelEl.textContent = f.label;
-                valEl.textContent = (Number(f.current) || 0) + " RPM";
+                valEl.textContent = (Number(f.current) || 0) + ' RPM';
             });
         } else {
-            fanContainer.innerHTML = "";
+            fanContainer.innerHTML = '';
         }
-        showMoreNote("fan-list", (sensors.fans || []).length - fans.length, "fans");
+        showMoreNote('fan-list', (sensors.fans || []).length - fans.length, 'fans');
 
         // Battery
         const bat = sensors.battery;
-        const batContainer = document.getElementById("battery-info");
+        const batContainer = document.getElementById('battery-info');
         if (bat) {
-            let header = batContainer.querySelector(".sensor-section-header");
+            const header = batContainer.querySelector('.sensor-section-header');
             if (!header || batContainer.children.length !== 2) {
                 batContainer.innerHTML = `<div class="sensor-section-header">Battery</div>
                 <div class="sensor-row">
@@ -648,22 +669,22 @@
                 </div>`;
             }
             const row = batContainer.children[1];
-            const labelEl = row.querySelector(".sensor-label");
-            const valEl = row.querySelector(".sensor-value");
+            const labelEl = row.querySelector('.sensor-label');
+            const valEl = row.querySelector('.sensor-value');
 
-            labelEl.textContent = bat.power_plugged ? "⚡ Plugged" : "🔋 Battery";
+            labelEl.textContent = bat.power_plugged ? '⚡ Plugged' : '🔋 Battery';
             // An unknown charge is not a flat battery; the TUI and `fetch` both
             // print "Unknown" rather than 0%.
             if (bat.percent == null) {
-                valEl.textContent = "Unknown";
-                valEl.className = "sensor-value";
+                valEl.textContent = 'Unknown';
+                valEl.className = 'sensor-value';
             } else {
-                valEl.textContent = bat.percent.toFixed(0) + "%";
+                valEl.textContent = bat.percent.toFixed(0) + '%';
                 valEl.className =
-                    "sensor-value " + (bat.percent > 20 ? "metric-ok" : "metric-crit");
+                    'sensor-value ' + (bat.percent > 20 ? 'metric-ok' : 'metric-crit');
             }
         } else {
-            batContainer.innerHTML = "";
+            batContainer.innerHTML = '';
         }
     }
 
@@ -675,10 +696,10 @@
             seen.add(u.name);
             return true;
         });
-        document.getElementById("user-count").textContent = uniqueUsers.length;
+        document.getElementById('user-count').textContent = uniqueUsers.length;
         const filteredUsers = uniqueUsers.slice(0, displayLimits.users);
 
-        const container = document.getElementById("user-list");
+        const container = document.getElementById('user-list');
         if (container.children.length !== filteredUsers.length) {
             container.innerHTML = filteredUsers
                 .map(() => {
@@ -687,45 +708,49 @@
                         <span class="user-terminal"></span>
                     </div>`;
                 })
-                .join("");
+                .join('');
         }
 
         filteredUsers.forEach((u, i) => {
             const row = container.children[i];
-            const nameEl = row.querySelector(".user-name");
-            const termEl = row.querySelector(".user-terminal");
+            const nameEl = row.querySelector('.user-name');
+            const termEl = row.querySelector('.user-terminal');
 
             nameEl.textContent = u.name;
-            termEl.textContent = u.terminal || "—";
+            termEl.textContent = u.terminal || '—';
         });
 
-        showMoreNote("user-list", uniqueUsers.length - filteredUsers.length, "users");
+        showMoreNote('user-list', uniqueUsers.length - filteredUsers.length, 'users');
     }
 
     function updateContainers(snap) {
         const ct = snap.containers || {};
         const containers = ct.containers || [];
-        const card = document.getElementById("containers-card");
+        const card = document.getElementById('containers-card');
 
         // No runtime installed is not "zero containers" — the TUI hides the
         // panel outright, so say "not available" rather than showing an empty
         // list that reads as a healthy host with nothing running.
         const runtimeAvailable = Boolean(ct.docker_available || ct.lxc_available);
-        if (card) card.classList.toggle("runtime-unavailable", !runtimeAvailable);
+        if (card) card.classList.toggle('runtime-unavailable', !runtimeAvailable);
         if (!runtimeAvailable) {
-            document.getElementById("container-count").textContent = "—";
-            document.getElementById("container-list").innerHTML =
+            document.getElementById('container-count').textContent = '—';
+            document.getElementById('container-list').innerHTML =
                 '<div class="empty-note">No container runtime detected</div>';
             return;
         }
         const running = containers.filter(isRunningContainer).length;
-        document.getElementById("container-count").textContent = running + " / " + containers.length;
+        document.getElementById('container-count').textContent =
+            running + ' / ' + containers.length;
 
-        const container = document.getElementById("container-list");
+        const container = document.getElementById('container-list');
         if (containers.length) {
             const showList = containers.slice(0, displayLimits.containers);
 
-            if (container.children.length !== showList.length || container.querySelector(".no-containers")) {
+            if (
+                container.children.length !== showList.length ||
+                container.querySelector('.no-containers')
+            ) {
                 container.innerHTML = showList
                     .map(() => {
                         return `<div class="container-row">
@@ -735,28 +760,29 @@
                             <span class="container-image"></span>
                         </div>`;
                     })
-                    .join("");
+                    .join('');
             }
 
             showList.forEach((c, i) => {
                 const row = container.children[i];
-                const runtimeEl = row.querySelector(".container-runtime");
-                const nameEl = row.querySelector(".container-name");
-                const statusEl = row.querySelector(".container-status");
-                const imageEl = row.querySelector(".container-image");
+                const runtimeEl = row.querySelector('.container-runtime');
+                const nameEl = row.querySelector('.container-name');
+                const statusEl = row.querySelector('.container-status');
+                const imageEl = row.querySelector('.container-image');
 
                 const isRunning = isRunningContainer(c);
 
                 runtimeEl.textContent = c.runtime;
                 nameEl.textContent = c.name;
                 statusEl.textContent = c.status;
-                statusEl.className = `container-status ${isRunning ? "status-running" : "status-stopped"}`;
+                statusEl.className = `container-status ${isRunning ? 'status-running' : 'status-stopped'}`;
                 imageEl.textContent = c.image;
             });
-            showMoreNote("container-list", containers.length - showList.length, "containers");
+            showMoreNote('container-list', containers.length - showList.length, 'containers');
         } else {
-            container.innerHTML = '<div class="no-containers empty-note">No containers detected</div>';
-            showMoreNote("container-list", 0, "containers");
+            container.innerHTML =
+                '<div class="no-containers empty-note">No containers detected</div>';
+            showMoreNote('container-list', 0, 'containers');
         }
     }
 
@@ -767,10 +793,10 @@
     let agentSortBy = null;
 
     function updateProcessNote(shown, total) {
-        const note = document.getElementById("process-note");
+        const note = document.getElementById('process-note');
         if (!note) return;
         if (total <= shown) {
-            note.textContent = "";
+            note.textContent = '';
             note.hidden = true;
             return;
         }
@@ -778,7 +804,7 @@
             ? `Showing ${shown} of ${total}, ranked by ${agentSortBy} on the agent`
             : `Showing ${shown} of ${total}, as ranked by the agent`;
         if (sortKey === null || sortKey === agentSortBy) {
-            note.textContent = base + ".";
+            note.textContent = base + '.';
         } else if (healthLoaded && !(sortKey in agentSortSpecs)) {
             // A column only this page sorts by: say it can't be a host-wide top-N.
             note.textContent =
@@ -798,30 +824,30 @@
         const procs = snap.processes || [];
         // process_count is the host total; procs is truncated for display.
         const total = snap.process_count || procs.length;
-        document.getElementById("proc-count").textContent = total + " processes";
+        document.getElementById('proc-count').textContent = total + ' processes';
 
         // Sort. sort_processes() lower-cases before comparing names, so this
         // must too or the two dashboards interleave differently.
         const sorted = sortProcesses(procs, sortSpec(sortKey), sortAsc);
 
         // Update header sort indicators
-        document.querySelectorAll("#process-table th[data-sort]").forEach((th) => {
-            const key = th.getAttribute("data-sort");
-            let baseText = th.getAttribute("data-base");
+        document.querySelectorAll('#process-table th[data-sort]').forEach((th) => {
+            const key = th.getAttribute('data-sort');
+            let baseText = th.getAttribute('data-base');
             if (!baseText) {
-                baseText = th.textContent.replace(/ [▲▼]/g, "");
-                th.setAttribute("data-base", baseText);
+                baseText = th.textContent.replace(/ [▲▼]/g, '');
+                th.setAttribute('data-base', baseText);
             }
             if (key === sortKey) {
-                th.textContent = baseText + (sortAsc ? " ▲" : " ▼");
-                th.setAttribute("aria-sort", sortAsc ? "ascending" : "descending");
+                th.textContent = baseText + (sortAsc ? ' ▲' : ' ▼');
+                th.setAttribute('aria-sort', sortAsc ? 'ascending' : 'descending');
             } else {
                 th.textContent = baseText;
-                th.removeAttribute("aria-sort");
+                th.removeAttribute('aria-sort');
             }
         });
 
-        const tbody = document.getElementById("process-tbody");
+        const tbody = document.getElementById('process-tbody');
         const showProcs = sorted.slice(0, maxDisplay);
 
         if (tbody.children.length !== showProcs.length) {
@@ -838,52 +864,59 @@
                         <td class="proc-status"></td>
                     </tr>`;
                 })
-                .join("");
+                .join('');
         }
 
         showProcs.forEach((p, i) => {
             const row = tbody.children[i];
-            const pidEl = row.querySelector(".proc-pid");
-            const nameEl = row.querySelector(".proc-name");
-            const userEl = row.querySelector(".proc-user");
-            const cpuEl = row.querySelector(".proc-cpu");
-            const memEl = row.querySelector(".proc-mem");
-            const rssEl = row.querySelector(".proc-rss");
-            const threadsEl = row.querySelector(".proc-threads");
-            const statusEl = row.querySelector(".proc-status");
+            const pidEl = row.querySelector('.proc-pid');
+            const nameEl = row.querySelector('.proc-name');
+            const userEl = row.querySelector('.proc-user');
+            const cpuEl = row.querySelector('.proc-cpu');
+            const memEl = row.querySelector('.proc-mem');
+            const rssEl = row.querySelector('.proc-rss');
+            const threadsEl = row.querySelector('.proc-threads');
+            const statusEl = row.querySelector('.proc-status');
 
             const cpuPct = p.cpu_percent || 0;
             const memPct = p.memory_percent || 0;
 
             pidEl.textContent = p.pid;
-            nameEl.textContent = (p.name || "").substring(0, 30);
-            userEl.textContent = (p.username || "—").substring(0, 12);
+            nameEl.textContent = (p.name || '').substring(0, 30);
+            userEl.textContent = (p.username || '—').substring(0, 12);
 
             cpuEl.textContent = cpuPct.toFixed(1);
-            cpuEl.className = "proc-cpu " + classForPercent(cpuPct);
+            cpuEl.className = 'proc-cpu ' + classForPercent(cpuPct);
 
             memEl.textContent = memPct.toFixed(1);
-            memEl.className = "proc-mem " + classForPercent(memPct);
+            memEl.className = 'proc-mem ' + classForPercent(memPct);
 
             rssEl.textContent = humanBytesCompact(p.memory_rss || 0);
             threadsEl.textContent = p.num_threads || 0;
 
-            statusEl.textContent = (p.status || "").substring(0, 10);
+            statusEl.textContent = (p.status || '').substring(0, 10);
         });
 
         updateProcessNote(showProcs.length, total);
     }
 
     const CARD_UPDATES = [
-        updateHeader, updateCpu, updateMemory, updateNetwork, updateDisk,
-        updateSensors, updateUsers, updateContainers, updateProcesses,
+        updateHeader,
+        updateCpu,
+        updateMemory,
+        updateNetwork,
+        updateDisk,
+        updateSensors,
+        updateUsers,
+        updateContainers,
+        updateProcesses,
     ];
 
     // ── Process table sorting ───────────────────────────────────────────
-    const processTable = document.getElementById("process-table");
+    const processTable = document.getElementById('process-table');
 
     function handleSort(th) {
-        const key = th.getAttribute("data-sort");
+        const key = th.getAttribute('data-sort');
         if (sortKey === key) {
             sortAsc = !sortAsc;
         } else {
@@ -898,14 +931,14 @@
         }
     }
 
-    processTable.addEventListener("click", (e) => {
-        const th = e.target.closest("th[data-sort]");
+    processTable.addEventListener('click', (e) => {
+        const th = e.target.closest('th[data-sort]');
         if (th) handleSort(th);
     });
 
-    processTable.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-            const th = e.target.closest("th[data-sort]");
+    processTable.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            const th = e.target.closest('th[data-sort]');
             if (th) {
                 e.preventDefault();
                 handleSort(th);
@@ -915,25 +948,25 @@
 
     // ── WebSocket ───────────────────────────────────────────────────────
     function showAuthModal(message) {
-        const modal = document.getElementById("auth-modal");
+        const modal = document.getElementById('auth-modal');
         if (!modal) return;
         modal.hidden = false;
         // Distinguish "wrong key" from "server restarted" — previously both
         // just re-showed a blank form.
-        const err = document.getElementById("auth-error");
+        const err = document.getElementById('auth-error');
         if (err) {
-            err.textContent = message || "";
+            err.textContent = message || '';
             err.hidden = !message;
         }
-        const input = document.getElementById("auth-key-input");
+        const input = document.getElementById('auth-key-input');
         if (input) {
-            input.value = "";
+            input.value = '';
             input.focus();
         }
     }
 
     function hideAuthModal() {
-        const modal = document.getElementById("auth-modal");
+        const modal = document.getElementById('auth-modal');
         if (modal) {
             modal.hidden = true;
         }
@@ -942,11 +975,11 @@
     // Keeps Tab from leaving the modal while it's open — without this, a
     // keyboard user can tab out to the dimmed dashboard behind it.
     function trapAuthModalFocus(e) {
-        if (e.key !== "Tab") return;
-        const modal = document.getElementById("auth-modal");
+        if (e.key !== 'Tab') return;
+        const modal = document.getElementById('auth-modal');
         if (!modal || modal.hidden) return;
         const focusable = modal.querySelectorAll(
-            'input, button, [href], select, textarea, [tabindex]:not([tabindex="-1"])'
+            'input, button, [href], select, textarea, [tabindex]:not([tabindex="-1"])',
         );
         if (focusable.length === 0) return;
         const first = focusable[0];
@@ -959,14 +992,14 @@
             first.focus();
         }
     }
-    document.addEventListener("keydown", trapAuthModalFocus);
+    document.addEventListener('keydown', trapAuthModalFocus);
 
     // Shown only while a reconnect is actually pending — not on first load,
     // not while waiting for a key, not once the retry budget is spent.
     function showToast(message) {
-        const toast = document.getElementById("conn-toast");
+        const toast = document.getElementById('conn-toast');
         if (!toast) return;
-        toast.textContent = message || "";
+        toast.textContent = message || '';
         toast.hidden = !message;
     }
 
@@ -974,45 +1007,48 @@
     // *reason* prefixes the countdown ("Server busy") so a 1013 still says why.
     function scheduleReconnect(badge, reason) {
         if (reconnectAttempts >= RECONNECT_MAX_ATTEMPTS) {
-            badge.textContent = "Disconnected";
-            badge.title = "Server unreachable.";
-            showToast("");
+            badge.textContent = 'Disconnected';
+            badge.title = 'Server unreachable.';
+            showToast('');
             // Telling someone to reload is a dead end when a click will do.
             showRetryButton();
             return;
         }
         const delay = reconnectDelay(
-            reconnectAttempts, RECONNECT_DELAY, RECONNECT_MAX_DELAY, RECONNECT_MAX_ATTEMPTS
+            reconnectAttempts,
+            RECONNECT_DELAY,
+            RECONNECT_MAX_DELAY,
+            RECONNECT_MAX_ATTEMPTS,
         );
         reconnectAttempts += 1;
         const seconds = Math.round(delay / 1000);
         badge.textContent = reason
             ? `${reason} — retrying in ${seconds}s…`
             : `Reconnecting in ${seconds}s…`;
-        showToast("Connection lost. Reconnecting…");
+        showToast('Connection lost. Reconnecting…');
         clearTimeout(reconnectTimer);
         reconnectTimer = setTimeout(connect, delay);
     }
 
     function showRetryButton() {
-        const badge = document.getElementById("status-badge");
-        if (!badge || document.getElementById("retry-btn")) return;
-        const btn = document.createElement("button");
-        btn.id = "retry-btn";
-        btn.className = "retry-btn";
-        btn.type = "button";
-        btn.textContent = "Retry";
-        btn.addEventListener("click", () => {
+        const badge = document.getElementById('status-badge');
+        if (!badge || document.getElementById('retry-btn')) return;
+        const btn = document.createElement('button');
+        btn.id = 'retry-btn';
+        btn.className = 'retry-btn';
+        btn.type = 'button';
+        btn.textContent = 'Retry';
+        btn.addEventListener('click', () => {
             reconnectAttempts = 0;
             btn.remove();
-            badge.textContent = "Connecting…";
+            badge.textContent = 'Connecting…';
             connect();
         });
-        badge.insertAdjacentElement("afterend", btn);
+        badge.insertAdjacentElement('afterend', btn);
     }
 
     function hideRetryButton() {
-        const btn = document.getElementById("retry-btn");
+        const btn = document.getElementById('retry-btn');
         if (btn) btn.remove();
     }
 
@@ -1023,21 +1059,21 @@
             ws.onclose = null;
             ws.close();
         }
-        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
         const params = new URLSearchParams(location.search);
-        let apiKey = params.get("api_key");
+        let apiKey = params.get('api_key');
 
         if (apiKey) {
             // A key handed over in the URL is session-scoped by default.
             storeKey(apiKey, false);
-            params.delete("api_key");
-            const newUrl = location.pathname + (params.toString() ? "?" + params.toString() : "");
+            params.delete('api_key');
+            const newUrl = location.pathname + (params.toString() ? '?' + params.toString() : '');
             window.history.replaceState({}, document.title, newUrl);
         } else {
             apiKey = loadKey();
         }
 
-        const url = proto + "//" + location.host + "/ws/live";
+        const url = proto + '//' + location.host + '/ws/live';
         // Handlers close over *this* socket, not the module-level `ws`: a late
         // event from a replaced socket must not act on its successor.
         const socket = new WebSocket(url);
@@ -1053,28 +1089,28 @@
             // Not "Live" yet: the server has not validated the key. Saying so
             // here flashed a connected badge at a user whose key was about to
             // be rejected.
-            const badge = document.getElementById("status-badge");
-            badge.textContent = "Authenticating…";
-            badge.title = "";
-            document.body.classList.remove("disconnected");
+            const badge = document.getElementById('status-badge');
+            badge.textContent = 'Authenticating…';
+            badge.title = '';
+            document.body.classList.remove('disconnected');
             reconnectAttempts = 0;
             hideRetryButton();
             hideAuthModal();
 
             // Fetch version, active modules and the server's default theme
-            fetch("/health")
+            fetch('/health')
                 .then((r) => r.json())
                 .then((d) => {
-                    let versionText = "v" + (d.version || "?");
+                    let versionText = 'v' + (d.version || '?');
                     // Payload contract version (API_VERSION in core/constants.py).
                     if (d.api_version !== undefined && d.api_version !== API_VERSION) {
                         versionText += ` · API v${d.api_version} (this page expects v${API_VERSION})`;
                         console.warn(
                             `Sentinella agent speaks API v${d.api_version}; this dashboard ` +
-                                `expects v${API_VERSION}. Reload, or update the older side.`
+                                `expects v${API_VERSION}. Reload, or update the older side.`,
                         );
                     }
-                    document.getElementById("app-version").textContent = versionText;
+                    document.getElementById('app-version').textContent = versionText;
                     activeModules = d.active_modules || null;
                     applyModuleAvailability();
                     if (Number(d.max_display) > 0) {
@@ -1091,7 +1127,11 @@
                         refreshInterval = Number(d.refresh_interval);
                     }
                     healthLoaded = true;
-                    if (d.sort_keys && typeof d.sort_keys === "object" && !Array.isArray(d.sort_keys)) {
+                    if (
+                        d.sort_keys &&
+                        typeof d.sort_keys === 'object' &&
+                        !Array.isArray(d.sort_keys)
+                    ) {
                         agentSortSpecs = d.sort_keys;
                     }
                     if (d.sort_by && agentSortSpecs[d.sort_by]) {
@@ -1105,7 +1145,7 @@
                     }
                     if (lastSnapshot) updateProcesses(lastSnapshot);
                     // Server default only applies when the user has no saved choice.
-                    if (!safeStorage.get("localStorage", "theme") && d.theme === "light") {
+                    if (!safeStorage.get('localStorage', 'theme') && d.theme === 'light') {
                         applyTheme(true);
                     }
                 })
@@ -1117,7 +1157,7 @@
             try {
                 snap = JSON.parse(event.data);
             } catch (err) {
-                console.error("Failed to parse snapshot:", err);
+                console.error('Failed to parse snapshot:', err);
                 return;
             }
             // First frame on this connection = the key was accepted. Setting
@@ -1128,11 +1168,11 @@
                 // Page-wide: picks the 4001 message ("may have changed" vs
                 // "not accepted") for any later rejection.
                 hadSuccessfulAuth = true;
-                const badge = document.getElementById("status-badge");
-                badge.textContent = "Live";
-                badge.title = "";
-                badge.classList.add("connected");
-                showToast("");
+                const badge = document.getElementById('status-badge');
+                badge.textContent = 'Live';
+                badge.title = '';
+                badge.classList.add('connected');
+                showToast('');
                 // Start the stale clock even if this frame repeats the last
                 // snapshot seen before a reconnect.
                 lastAdvanceMs = Date.now();
@@ -1152,34 +1192,35 @@
                     console.error(`Failed to render ${update.name}:`, err);
                 }
             }
-            document.body.classList.remove("loading");
+            document.body.classList.remove('loading');
             // When the agent collected it — not when it arrived, which looks
             // fresh even while the agent keeps resending an old snapshot.
-            const collected = Number(snap.timestamp) > 0 ? new Date(snap.timestamp * 1000) : new Date();
-            document.getElementById("last-update").textContent =
-                "Last update: " + collected.toLocaleTimeString();
+            const collected =
+                Number(snap.timestamp) > 0 ? new Date(snap.timestamp * 1000) : new Date();
+            document.getElementById('last-update').textContent =
+                'Last update: ' + collected.toLocaleTimeString();
         };
 
         socket.onclose = (event) => {
             // Disconnected supersedes stale; the next connection starts fresh.
             setStale(false);
             lastAdvanceMs = 0;
-            const badge = document.getElementById("status-badge");
-            badge.classList.remove("connected");
-            document.body.classList.add("disconnected");
+            const badge = document.getElementById('status-badge');
+            badge.classList.remove('connected');
+            document.body.classList.add('disconnected');
 
             if (event.code === 4001) {
-                badge.textContent = "Auth Required";
-                showToast("");
+                badge.textContent = 'Auth Required';
+                showToast('');
                 clearKey();
                 reconnectAttempts = 0;
                 showAuthModal(
                     hadSuccessfulAuth
-                        ? "Connection rejected. The API key may have changed — please re-enter it."
-                        : "That API key was not accepted."
+                        ? 'Connection rejected. The API key may have changed — please re-enter it.'
+                        : 'That API key was not accepted.',
                 );
             } else if (event.code === 1013) {
-                scheduleReconnect(badge, "Server busy");
+                scheduleReconnect(badge, 'Server busy');
             } else {
                 scheduleReconnect(badge);
             }
@@ -1201,23 +1242,23 @@
     function setStale(isStale) {
         if (isStale === stale) return;
         stale = isStale;
-        document.body.classList.toggle("stale", isStale);
-        const badge = document.getElementById("status-badge");
+        document.body.classList.toggle('stale', isStale);
+        const badge = document.getElementById('status-badge');
         if (!badge) return;
-        badge.classList.toggle("stale", isStale);
-        badge.classList.toggle("connected", !isStale);
+        badge.classList.toggle('stale', isStale);
+        badge.classList.toggle('connected', !isStale);
         if (isStale) {
             const seconds = Math.round((Date.now() - lastAdvanceMs) / 1000);
-            badge.textContent = "Stale";
+            badge.textContent = 'Stale';
             badge.title = `No new data for ${seconds}s — the agent may be stuck collecting.`;
         } else {
-            badge.textContent = "Live";
-            badge.title = "";
+            badge.textContent = 'Live';
+            badge.title = '';
         }
     }
 
     setInterval(() => {
-        document.getElementById("clock").textContent = new Date().toLocaleTimeString();
+        document.getElementById('clock').textContent = new Date().toLocaleTimeString();
         if (lastAdvanceMs && Date.now() - lastAdvanceMs >= staleAfterMs()) {
             setStale(true);
         }
@@ -1231,7 +1272,7 @@
         CHART_SERIES.forEach((series, chart) => {
             series.forEach((name, i) => {
                 chart.data.datasets[i].borderColor = palette[name];
-                chart.data.datasets[i].backgroundColor = palette[name + "Fill"];
+                chart.data.datasets[i].backgroundColor = palette[name + 'Fill'];
             });
             chart.options.scales.y.grid.color = palette.grid;
             chart.options.scales.y.ticks.color = palette.tick;
@@ -1243,36 +1284,36 @@
         });
     }
 
-    const themeBtn = document.getElementById("theme-toggle");
+    const themeBtn = document.getElementById('theme-toggle');
 
     function applyTheme(isLight) {
-        document.body.classList.toggle("light-theme", isLight);
-        if (themeBtn) themeBtn.setAttribute("aria-pressed", String(isLight));
+        document.body.classList.toggle('light-theme', isLight);
+        if (themeBtn) themeBtn.setAttribute('aria-pressed', String(isLight));
         updateChartTheme();
     }
 
     if (themeBtn) {
-        themeBtn.addEventListener("click", () => {
-            const isLight = !document.body.classList.contains("light-theme");
-            safeStorage.set("localStorage", "theme", isLight ? "light" : "dark");
+        themeBtn.addEventListener('click', () => {
+            const isLight = !document.body.classList.contains('light-theme');
+            safeStorage.set('localStorage', 'theme', isLight ? 'light' : 'dark');
             applyTheme(isLight);
         });
     }
 
     // ── Init ────────────────────────────────────────────────────────────
-    cpuChart = createPercentChart("cpu-chart", "CPU %", "cpu");
-    memChart = createPercentChart("mem-chart", "Memory %", "mem");
-    netChart = createNetChart("net-chart");
-    applyTheme(document.body.classList.contains("light-theme"));
-    const authForm = document.getElementById("auth-form");
+    cpuChart = createPercentChart('cpu-chart', 'CPU %', 'cpu');
+    memChart = createPercentChart('mem-chart', 'Memory %', 'mem');
+    netChart = createNetChart('net-chart');
+    applyTheme(document.body.classList.contains('light-theme'));
+    const authForm = document.getElementById('auth-form');
     if (authForm) {
-        authForm.addEventListener("submit", (e) => {
+        authForm.addEventListener('submit', (e) => {
             e.preventDefault();
-            const input = document.getElementById("auth-key-input");
+            const input = document.getElementById('auth-key-input');
             if (input) {
                 const key = input.value.trim();
-                const remember = document.getElementById("auth-remember");
-                storeKey(key, Boolean(remember && remember.checked));
+                const remember = document.getElementById('auth-remember');
+                storeKey(key, Boolean(remember?.checked));
                 hideAuthModal();
                 connect();
             }

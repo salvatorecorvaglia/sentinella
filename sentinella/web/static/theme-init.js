@@ -5,12 +5,12 @@
    exists, and lives in its own file rather than an inline <script> so the
    page can be served under a CSP with no 'unsafe-inline'. */
 (() => {
-    "use strict";
+    'use strict';
     try {
-        if (localStorage.getItem("theme") === "light") {
-            document.body.classList.add("light-theme");
+        if (localStorage.getItem('theme') === 'light') {
+            document.body.classList.add('light-theme');
         }
-    } catch (e) {
+    } catch (_e) {
         /* storage blocked or unavailable — keep the default dark theme */
     }
 })();

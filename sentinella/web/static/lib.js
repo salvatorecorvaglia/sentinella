@@ -8,33 +8,33 @@
    Loaded as a plain script before app.js (exposing window.SentinellaLib) and as a
    CommonJS module under Node, so the browser needs no build step.
    ───────────────────────────────────────────────────────────────────────── */
-(function (root, factory) {
-    "use strict";
+((root, factory) => {
+    'use strict';
     const api = factory();
-    if (typeof module === "object" && module.exports) {
+    if (typeof module === 'object' && module.exports) {
         module.exports = api;
     } else {
         root.SentinellaLib = api;
     }
-})(typeof self !== "undefined" ? self : globalThis, function () {
-    "use strict";
+})(typeof self !== 'undefined' ? self : globalThis, () => {
+    'use strict';
 
     // Mirrors human_bytes() in sentinella/core/utils.py.
     function humanBytes(bytes) {
-        const units = ["B", "KB", "MB", "GB", "TB"];
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
         let i = 0;
         let val = Number(bytes) || 0;
         while (Math.abs(val) >= 1024 && i < units.length - 1) {
             val /= 1024;
             i++;
         }
-        return val.toFixed(1) + " " + units[i];
+        return val.toFixed(1) + ' ' + units[i];
     }
 
     // Mirrors human_bytes_compact() — the process table is dense enough that
     // "83MB" reads better than "83.4 MB".
     function humanBytesCompact(bytes) {
-        const units = ["B", "KB", "MB", "GB", "TB"];
+        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
         let i = 0;
         let val = Number(bytes) || 0;
         while (Math.abs(val) >= 1024 && i < units.length - 1) {
@@ -45,7 +45,7 @@
     }
 
     function humanBytesRate(bytes) {
-        return humanBytes(bytes) + "/s";
+        return humanBytes(bytes) + '/s';
     }
 
     // Bytes/second between two cumulative counter readings. Returns 0 when
@@ -62,63 +62,63 @@
         const h = Math.floor((total % 86400) / 3600);
         const m = Math.floor((total % 3600) / 60);
         const parts = [];
-        if (d > 0) parts.push(d + "d");
-        parts.push(h + "h");
-        parts.push(m + "m");
-        return parts.join(" ");
+        if (d > 0) parts.push(d + 'd');
+        parts.push(h + 'h');
+        parts.push(m + 'm');
+        return parts.join(' ');
     }
 
     // Severity. The thresholds are passed in because the agent ships its own
     // over /health — see PERCENT_THRESHOLDS / TEMP_THRESHOLDS in core/utils.py.
     function classForPercent(pct, thresholds) {
         const [warn, crit] = thresholds;
-        if (pct < warn) return "metric-ok";
-        if (pct < crit) return "metric-warn";
-        return "metric-crit";
+        if (pct < warn) return 'metric-ok';
+        if (pct < crit) return 'metric-warn';
+        return 'metric-crit';
     }
 
     function bgClassForPercent(pct, thresholds) {
         const [warn, crit] = thresholds;
-        if (pct < warn) return "bg-ok";
-        if (pct < crit) return "bg-warn";
-        return "bg-crit";
+        if (pct < warn) return 'bg-ok';
+        if (pct < crit) return 'bg-warn';
+        return 'bg-crit';
     }
 
     // Temperatures are °C, not percentages: prefer the sensor's own trip
     // points and only fall back to a fixed scale. Mirrors level_for_temp().
     function classForTemp(celsius, high, critical, thresholds) {
-        if (critical && celsius >= critical) return "metric-crit";
-        if (high && celsius >= high) return "metric-warn";
+        if (critical && celsius >= critical) return 'metric-crit';
+        if (high && celsius >= high) return 'metric-warn';
         if (!high && !critical) {
             const [warn, crit] = thresholds;
-            if (celsius >= crit) return "metric-crit";
-            if (celsius >= warn) return "metric-warn";
+            if (celsius >= crit) return 'metric-crit';
+            if (celsius >= warn) return 'metric-warn';
         }
-        return "metric-ok";
+        return 'metric-ok';
     }
 
     // Columns only the dashboard sorts by. The agent's own keys (cpu, memory,
     // pid, name) come from /health as sort_keys — built from PROCESS_SORT_KEYS
     // in sentinella/core/sort.py — so they are not restated here.
     const WEB_SORT_KEYS = {
-        user: { field: "username", descending: false },
-        rss: { field: "memory_rss", descending: true },
-        threads: { field: "num_threads", descending: true },
+        user: { field: 'username', descending: false },
+        rss: { field: 'memory_rss', descending: true },
+        threads: { field: 'num_threads', descending: true },
     };
 
     // sort_processes() lower-cases before comparing names, so this must too or
     // the two dashboards interleave differently on the same host.
     function compareProcesses(spec, ascending) {
         const direction = ascending ? 1 : -1;
-        return function (a, b) {
+        return (a, b) => {
             const va = a[spec.field];
             const vb = b[spec.field];
-            if (typeof va === "string" || typeof vb === "string") {
+            if (typeof va === 'string' || typeof vb === 'string') {
                 return (
                     direction *
-                    String(va || "")
+                    String(va || '')
                         .toLowerCase()
-                        .localeCompare(String(vb || "").toLowerCase())
+                        .localeCompare(String(vb || '').toLowerCase())
                 );
             }
             return direction * ((va || 0) - (vb || 0));
@@ -134,10 +134,10 @@
     }
 
     // Mirrors ContainerInfo.is_running / RUNNING_STATUSES in core/models.py.
-    const RUNNING_STATUSES = new Set(["running", "up"]);
+    const RUNNING_STATUSES = new Set(['running', 'up']);
 
     function isRunningContainer(c) {
-        return RUNNING_STATUSES.has(String((c && c.status) || "").toLowerCase());
+        return RUNNING_STATUSES.has(String(c?.status || '').toLowerCase());
     }
 
     // Exponential backoff, so a downed server is not polled forever at a fixed
@@ -151,28 +151,28 @@
     // as readable plaintext; the salt ships in this file, so anyone with
     // devtools or an XSS foothold can recover it. The real controls are HTTPS
     // and keeping the key out of URLs — see SECURITY.md.
-    const OBFUSCATION_SALT = "sentinella_obfuscation_salt";
+    const OBFUSCATION_SALT = 'sentinella_obfuscation_salt';
 
     function xorWithSalt(text) {
-        let result = "";
+        let result = '';
         for (let i = 0; i < text.length; i++) {
             result += String.fromCharCode(
-                text.charCodeAt(i) ^ OBFUSCATION_SALT.charCodeAt(i % OBFUSCATION_SALT.length)
+                text.charCodeAt(i) ^ OBFUSCATION_SALT.charCodeAt(i % OBFUSCATION_SALT.length),
             );
         }
         return result;
     }
 
     function obfuscateKey(text) {
-        if (!text) return "";
+        if (!text) return '';
         return btoa(xorWithSalt(text));
     }
 
     function deobfuscateKey(ciphertext) {
-        if (!ciphertext) return "";
+        if (!ciphertext) return '';
         try {
             return xorWithSalt(atob(ciphertext));
-        } catch (e) {
+        } catch (_e) {
             return ciphertext;
         }
     }

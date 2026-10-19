@@ -19,10 +19,12 @@
     /* System stacks: no webfont requests, so the dashboard renders identically
        on hosts with no internet access. Inter/JetBrains Mono are still used
        when the viewer happens to have them installed locally. */
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-        'Helvetica Neue', Arial, sans-serif;
-    --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', 'Cascadia Mono',
-        Menlo, Consolas, 'Liberation Mono', monospace;
+    --font-sans:
+        "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+        sans-serif;
+    --font-mono:
+        "JetBrains Mono", "SF Mono", "Fira Code", "Cascadia Mono", Menlo, Consolas,
+        "Liberation Mono", monospace;
     /* Surfaces layered *over* a card or the page. These were literal
        rgba(255,255,255,…) / rgba(10,14,23,…) values, which silently assume the
        ground underneath is dark — so in light mode every track and row tint
@@ -88,7 +90,7 @@ body.light-theme {
     --header-bg: rgba(255, 255, 255, 0.95);
     --th-bg: #e6ecf3;
     --toast-bg: rgba(255, 255, 255, 0.97);
-    --track-bg: rgba(15, 23, 42, 0.10);
+    --track-bg: rgba(15, 23, 42, 0.1);
     --row-tint: rgba(15, 23, 42, 0.025);
     --row-stripe: rgba(15, 23, 42, 0.035);
     --row-tint-hover: rgba(15, 23, 42, 0.06);
@@ -98,7 +100,7 @@ body.light-theme {
     --shimmer-hi: rgba(15, 23, 42, 0.05);
     --btn-ghost-hover: rgba(15, 23, 42, 0.06);
     --card-hover-border: rgba(2, 132, 199, 0.35);
-    --card-hover-shadow: rgba(15, 23, 42, 0.10);
+    --card-hover-shadow: rgba(15, 23, 42, 0.1);
     /* The dark lines (#00d2ff) sat at ~1.3:1 on the light card. */
     --chart-cpu: #0369a1;
     --chart-cpu-fill: rgba(3, 105, 161, 0.1);
@@ -128,7 +130,9 @@ body.light-theme {
     display: none !important;
 }
 
-*, *::before, *::after {
+*,
+*::before,
+*::after {
     box-sizing: border-box;
     margin: 0;
     padding: 0;
@@ -668,24 +672,49 @@ canvas {
 
 /* ── Animations ─────────────────────────────────────────────────────────── */
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(8px); }
-    to { opacity: 1; transform: translateY(0); }
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 .card {
     animation: fadeIn 0.5s ease forwards;
 }
 
-.card:nth-child(2) { animation-delay: 0.05s; }
-.card:nth-child(3) { animation-delay: 0.10s; }
-.card:nth-child(4) { animation-delay: 0.15s; }
-.card:nth-child(5) { animation-delay: 0.20s; }
-.card:nth-child(6) { animation-delay: 0.25s; }
-.card:nth-child(7) { animation-delay: 0.30s; }
-.card:nth-child(8) { animation-delay: 0.35s; }
+.card:nth-child(2) {
+    animation-delay: 0.05s;
+}
+.card:nth-child(3) {
+    animation-delay: 0.1s;
+}
+.card:nth-child(4) {
+    animation-delay: 0.15s;
+}
+.card:nth-child(5) {
+    animation-delay: 0.2s;
+}
+.card:nth-child(6) {
+    animation-delay: 0.25s;
+}
+.card:nth-child(7) {
+    animation-delay: 0.3s;
+}
+.card:nth-child(8) {
+    animation-delay: 0.35s;
+}
 @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
 }
 
 /* ── Responsive ─────────────────────────────────────────────────────────── */
@@ -693,7 +722,9 @@ canvas {
     #dashboard {
         grid-template-columns: repeat(2, 1fr);
     }
-    .card-wide { grid-column: span 2; }
+    .card-wide {
+        grid-column: span 2;
+    }
     #cpu-card,
     #memory-card,
     #network-card,
@@ -711,8 +742,15 @@ canvas {
     #dashboard {
         grid-template-columns: 1fr;
     }
-    .card, .card-wide, #cpu-card, #memory-card, #network-card, #containers-card,
-    #users-card, #disk-card, #sensors-card {
+    .card,
+    .card-wide,
+    #cpu-card,
+    #memory-card,
+    #network-card,
+    #containers-card,
+    #users-card,
+    #disk-card,
+    #sensors-card {
         grid-column: span 1;
     }
     #main-header {
@@ -726,13 +764,25 @@ canvas {
 }
 
 /* ── Metric/Sensor States (reusable) ── */
-.metric-ok { color: var(--accent-green); }
-.metric-warn { color: var(--accent-amber); }
-.metric-crit { color: var(--accent-red); }
+.metric-ok {
+    color: var(--accent-green);
+}
+.metric-warn {
+    color: var(--accent-amber);
+}
+.metric-crit {
+    color: var(--accent-red);
+}
 
-.bg-ok { background: var(--accent-green) !important; }
-.bg-warn { background: var(--accent-amber) !important; }
-.bg-crit { background: var(--accent-red) !important; }
+.bg-ok {
+    background: var(--accent-green) !important;
+}
+.bg-warn {
+    background: var(--accent-amber) !important;
+}
+.bg-crit {
+    background: var(--accent-red) !important;
+}
 
 /* ── Section header for sensors panel ── */
 .sensor-section-header {
@@ -783,14 +833,23 @@ body.loading .sensor-list,
 body.loading .user-list,
 body.loading .container-list {
     color: transparent !important;
-    background: linear-gradient(90deg, var(--border-color) 25%, var(--shimmer-hi) 50%, var(--border-color) 75%) !important;
+    background: linear-gradient(
+        90deg,
+        var(--border-color) 25%,
+        var(--shimmer-hi) 50%,
+        var(--border-color) 75%
+    ) !important;
     background-size: 200% 100% !important;
     animation: loading-pulse 1.5s infinite !important;
     border-radius: 4px;
 }
 @keyframes loading-pulse {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
 }
 
 /* ── Theme Toggle Button ────────────────────────────────────────────────── */
@@ -913,8 +972,6 @@ body.light-theme .modal-overlay {
 body.light-theme .btn-primary {
     color: #ffffff;
 }
-
-
 
 /* ── Disabled modules ──────────────────────────────────────────────────────
    A module turned off in sentinella.toml must read as "not monitored" rather than

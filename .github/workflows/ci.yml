@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -69,7 +69,6 @@ jobs:
 
   test:
     name: Test (${{ matrix.os }} - Python ${{ matrix.python-version }})
-    needs: lint
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -96,8 +95,13 @@ jobs:
       - name: Sync workspace
         run: uv sync --all-extras --dev --frozen
 
-      - name: Run test suite
+      - name: Run test suite with coverage
+        if: matrix.os == 'ubuntu-24.04' && matrix.python-version == '3.12'
         run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Run test suite (other platforms and Python versions)
+        if: matrix.os != 'ubuntu-24.04' || matrix.python-version != '3.12'
+        run: uv run pytest
 
       - name: Upload coverage artifact
         if: matrix.os == 'ubuntu-24.04' && matrix.python-version == '3.12'

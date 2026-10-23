@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sentinella-monitor"
 version = "1.1.0"
-description = "Cross-platform system monitor with TUI, web dashboard, and remote monitoring"
+description = "System monitoring with terminal and web dashboards"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"

@@ -1,6 +1,6 @@
 # Sentinella 🔔
 
-**Cross-platform system monitor with TUI, web dashboard, and remote monitoring**
+**System monitoring with terminal and web dashboards**
 
 **Sentinella** is a cross-platform, open-source system monitor written in Python that works on Linux, BSD, macOS, and Windows.
 

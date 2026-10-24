@@ -3,15 +3,14 @@ name: CI
 on:
   push:
     branches: [ main ]
-    paths-ignore:
-      - '**.md'
   pull_request:
     branches: [ main ]
-    paths-ignore:
-      - '**.md'
+
+  workflow_call:
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -23,10 +22,13 @@ env:
 jobs:
   lint:
     name: Lint & Format
+    timeout-minutes: 15
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
@@ -39,20 +41,23 @@ jobs:
         run: uv sync --all-extras --dev --frozen
 
       - name: Run Ruff check
-        run: uv run ruff check
+        run: uv run --frozen ruff check
 
       - name: Run Ruff format check
-        run: uv run ruff format --check
+        run: uv run --frozen ruff format --check
 
       - name: Run mypy
-        run: uv run mypy
+        run: uv run --frozen mypy
 
   audit:
     name: Dependency audit
+    timeout-minutes: 15
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
@@ -65,16 +70,17 @@ jobs:
         run: uv sync --all-extras --dev --frozen
 
       - name: Audit dependencies for known vulnerabilities
-        run: uv export --format requirements-txt --no-emit-project --all-extras --dev | uv run --with pip-audit pip-audit --strict -r /dev/stdin
+        run: uv export --frozen --format requirements-txt --no-emit-project --all-extras --dev | uv run --frozen --with pip-audit pip-audit --strict -r /dev/stdin
 
   test:
     name: Test (${{ matrix.os }} - Python ${{ matrix.python-version }})
+    timeout-minutes: 15
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04]
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13"]
         include:
           - os: macos-15
             python-version: "3.13"
@@ -84,6 +90,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Install uv
         uses: astral-sh/setup-uv@v8.1.0
@@ -97,11 +105,11 @@ jobs:
 
       - name: Run test suite with coverage
         if: matrix.os == 'ubuntu-24.04' && matrix.python-version == '3.12'
-        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml
+        run: uv run --frozen pytest --cov --cov-report=term-missing --cov-report=xml
 
       - name: Run test suite (other platforms and Python versions)
         if: matrix.os != 'ubuntu-24.04' || matrix.python-version != '3.12'
-        run: uv run pytest
+        run: uv run --frozen pytest
 
       - name: Upload coverage artifact
         if: matrix.os == 'ubuntu-24.04' && matrix.python-version == '3.12'
@@ -109,18 +117,21 @@ jobs:
         with:
           name: coverage-xml
           path: coverage.xml
+          if-no-files-found: error
+          retention-days: 7
 
   web-test:
     name: Web dashboard tests
+    timeout-minutes: 15
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v5
-        with:
-          version: "11.23.0"
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -135,5 +146,5 @@ jobs:
       - name: Check JavaScript with Biome
         run: pnpm lint
 
-      - name: Run vitest
-        run: pnpm test
+      - name: Run vitest with coverage
+        run: pnpm test:coverage

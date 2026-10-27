@@ -23,23 +23,29 @@ def test_containers_plugin_always_loadable():
         assert metrics.containers == []
 
 
-def test_containers_plugin_detects_docker_started_later():
+@patch("sentinella.plugins.containers.time.monotonic")
+def test_containers_plugin_detects_docker_started_later(mock_monotonic):
     """A daemon that appears after startup is picked up without a restart."""
     mock_docker = MagicMock()
     mock_client = MagicMock()
     mock_client.containers.list.return_value = []
     mock_docker.from_env.return_value = mock_client
+    mock_monotonic.return_value = 10.0
 
     with patch("shutil.which", return_value=None), patch.dict("sys.modules", {"docker": None}):
         plugin = ContainersPlugin()
         assert plugin.collect().docker_available is False
 
-    # Docker comes up; expire the 30 s availability cache to force a re-check.
+    # Docker comes up; it remains cached as unavailable until 30 s have elapsed.
     with (
         patch("shutil.which", return_value=None),
         patch.dict("sys.modules", {"docker": mock_docker}),
     ):
-        plugin._last_check = 0.0
+        mock_monotonic.return_value = 39.0
+        assert plugin.collect().docker_available is False
+        mock_docker.from_env.assert_not_called()
+
+        mock_monotonic.return_value = 40.0
         assert plugin.collect().docker_available is True
 
 

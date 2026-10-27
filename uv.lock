@@ -1233,6 +1233,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "httpx" },
+    { name = "packaging" },
     { name = "psutil" },
     { name = "rich" },
     { name = "textual" },
@@ -1258,6 +1259,7 @@ requires-dist = [
     { name = "docker", marker = "extra == 'docker'", specifier = ">=7.0.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "httpx", specifier = ">=0.27.0" },
+    { name = "packaging", specifier = ">=24.0" },
     { name = "psutil", specifier = ">=5.9.0" },
     { name = "rich", specifier = ">=13.0.0" },
     { name = "textual", specifier = ">=0.80.0" },

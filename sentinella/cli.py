@@ -94,6 +94,10 @@ def _build_parser() -> argparse.ArgumentParser:
     )
 
     sub = parser.add_subparsers(dest="command")
+    sub.add_parser("check-updates", help="Check for a newer compatible stable release")
+    upgrade = sub.add_parser("upgrade", help="Upgrade using the original uv/pipx installation")
+    upgrade.add_argument("--yes", action="store_true", help="Confirm the upgrade")
+    upgrade.add_argument("--dry-run", action="store_true", help="Show the command only")
 
     # ── fetch ────────────────────────────────────────────────────────
     sub.add_parser("fetch", help="Quick system summary (neofetch-style)", parents=[common])
@@ -168,6 +172,21 @@ def _exit_past_stuck_calls(grace: float = 2.0) -> None:
 def _run(argv: list[str] | None) -> None:
     parser = _build_parser()
     args = parser.parse_args(argv)
+    if args.command in ("check-updates", "upgrade"):
+        from sentinella.updates import check_update, current_version, upgrade
+
+        try:
+            if args.command == "upgrade":
+                raise SystemExit(upgrade(yes=args.yes, dry_run=args.dry_run))
+            latest = check_update()
+            print(
+                f"Update available: {latest}. Run sentinella upgrade."
+                if latest
+                else f"Sentinella {current_version()} is up to date."
+            )
+        except Exception as exc:
+            parser.exit(1, f"sentinella: {exc}\n")
+        return
 
     log_level = logging.DEBUG if getattr(args, "verbose", False) else logging.WARNING
     logging.basicConfig(level=log_level, format=_LOG_FORMAT)

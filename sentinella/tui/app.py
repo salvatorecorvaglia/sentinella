@@ -8,8 +8,10 @@ Keybindings:
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import logging
+import os
 from pathlib import Path
 
 from textual.app import App, ComposeResult
@@ -95,6 +97,8 @@ class SentinellaApp(App):
         # dashboard.tcss uses design tokens ($surface, $accent, …), so setting
         # the theme here repaints the whole dashboard.
         self.theme = "textual-light" if self._config.general.theme == "light" else "textual-dark"
+        if not self.is_headless and os.environ.get("SENTINELLA_DISABLE_UPDATE_CHECK") != "1":
+            self.run_worker(self._check_for_updates(), group="updates")
 
         for message in self._startup_warnings:
             self.notify(message, severity="error", timeout=10)
@@ -103,6 +107,19 @@ class SentinellaApp(App):
         self.set_interval(interval, self._tick)
         # Do an initial collection immediately
         self._tick()
+
+    async def _check_for_updates(self) -> None:
+        from sentinella.updates import check_update
+
+        try:
+            latest = await asyncio.to_thread(check_update, cached=True)
+            if latest:
+                self.notify(
+                    f"Sentinella {latest} is available. Run sentinella upgrade after quitting.",
+                    timeout=12,
+                )
+        except Exception:
+            log.debug("Update check unavailable", exc_info=True)
 
     def _tick(self) -> None:
         """Collect metrics and push to all widgets."""

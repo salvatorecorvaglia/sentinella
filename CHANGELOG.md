@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Add compatible stable-release checks, background TUI notifications, and confirmed uv/pipx tool upgrades with a dry-run option.
+
 - Biome linting and formatting for dashboard JavaScript, CSS, and tests, with lint checks enforced in CI.
 
 ### Changed

@@ -10,7 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Add compatible stable-release checks, background TUI notifications, and confirmed uv/pipx tool upgrades with a dry-run option.
-
 - Biome linting and formatting for dashboard JavaScript, CSS, and tests, with lint checks enforced in CI.
 
 ### Changed
@@ -18,10 +17,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Switched JavaScript tooling from npm to pnpm with a pinned package manager version and frozen lockfile installs in CI.
 - Updated Python and JavaScript dependencies, including Ruff, Biome, Vitest, and jsdom.
 - Run CI lint and test jobs independently, cancel superseded workflow runs, and collect Python coverage only on Ubuntu with Python 3.12.
+- Require an existing version tag and reusable CI checks before building release packages; verify the same package checksums before GitHub and PyPI publication.
+- Extend Linux CI coverage to Python 3.11, use frozen Python dependency resolution, and collect dashboard JavaScript coverage.
+- Refresh the dashboard logo and project documentation.
+
 
 ### Security
 
 - Compare UTF-8 API keys using equal-length padded byte strings and an explicit length check, with regression coverage for non-ASCII keys and trailing NUL bytes.
+
+### Fixed
+
+- Make the Docker availability-cache test deterministic by controlling the monotonic clock.
 
 ## [1.1.0] - 2026-10-14
 

@@ -10,7 +10,7 @@
          access, and a CDN would be able to execute script in this origin.
          Chart.js is vendored; fonts fall back to the system UI stack. -->
     <link rel="stylesheet" href="/static/style.css">
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔔</text></svg>">
+    <link rel="icon" type="image/svg+xml" href="/static/sentinella.svg">
     <script src="/static/vendor/chart.umd.min.js"></script>
 </head>
 <body class="loading disconnected">
@@ -19,7 +19,7 @@
     <!-- Header -->
     <header id="main-header">
         <div class="header-left">
-            <span class="logo">🔔</span>
+            <img class="logo" src="/static/sentinella.svg" alt="" width="32" height="32">
             <h1>Sentinella</h1>
             <span class="badge" id="status-badge" role="status" aria-live="polite">Connecting…</span>
         </div>
@@ -174,7 +174,7 @@
     </main>
 
     <footer id="main-footer">
-        <span>🔔 Sentinella <span id="app-version"></span></span>
+        <span><img src="/static/sentinella.svg" alt="" width="18" height="18"> Sentinella <span id="app-version"></span></span>
         <span id="last-update" aria-live="polite">Last update: —</span>
     </footer>
 
@@ -187,7 +187,7 @@
          the CSP (style-src 'self') drops inline style attributes. -->
     <div id="auth-modal" class="modal-overlay" hidden>
         <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title">
-            <span class="modal-logo">🔔</span>
+            <img class="modal-logo" src="/static/sentinella.svg" alt="" width="64" height="64">
             <h2 id="auth-modal-title">Authentication Required</h2>
             <p>Please enter the API key to connect to the Sentinella agent.</p>
             <p id="auth-error" class="auth-error" role="alert" hidden></p>

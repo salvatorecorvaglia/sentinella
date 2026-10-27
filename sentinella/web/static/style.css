@@ -908,9 +908,8 @@ body.light-theme .theme-toggle-btn:hover {
 }
 
 .modal-logo {
-    font-size: 3rem;
     display: block;
-    margin-bottom: 1rem;
+    margin: 0 auto 1rem;
 }
 
 .modal-content h2 {

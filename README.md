@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="resources/sentinella.svg" alt="Sentinella logo" width="96" height="96">
+</p>
+
 # Sentinella 🔔
 
 **System monitoring with terminal and web dashboards**

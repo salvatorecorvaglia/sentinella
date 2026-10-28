@@ -265,6 +265,7 @@ describe('dashboard render', () => {
     it('puts host-supplied text in the DOM as text, never as markup', () => {
         const ws = sockets[0];
         ws.onopen();
+        const existingImages = [...document.querySelectorAll('img')];
         deliver(ws, {
             ...SNAPSHOT,
             processes: [
@@ -283,7 +284,7 @@ describe('dashboard render', () => {
         const cell = document.querySelector('.proc-name');
         expect(cell.textContent).toContain('<img src=x');
         expect(cell.querySelector('img')).toBeNull();
-        expect(document.querySelectorAll('img').length).toBe(0);
+        expect([...document.querySelectorAll('img')]).toEqual(existingImages);
     });
 
     it('survives a snapshot with every optional field missing', () => {

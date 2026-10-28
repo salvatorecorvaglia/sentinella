@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sentinella-monitor"
-version = "1.1.0"
+version = "1.2.0"
 description = "System monitoring with terminal and web dashboards"
 readme = "README.md"
 license = {text = "MIT"}

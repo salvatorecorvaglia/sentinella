@@ -49,26 +49,6 @@ jobs:
       - name: Run mypy
         run: uv run --frozen mypy
 
-  audit:
-    name: Dependency audit
-    timeout-minutes: 15
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
-        with:
-          enable-cache: true
-          cache-suffix: "audit"
-          python-version: "3.12"
-
-      - name: Sync workspace
-        run: uv sync --all-extras --dev --frozen
-
       - name: Audit dependencies for known vulnerabilities
         run: uv export --frozen --format requirements-txt --no-emit-project --all-extras --dev | uv run --frozen --with pip-audit pip-audit --strict -r /dev/stdin
 
@@ -79,13 +59,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04]
-        python-version: ["3.11", "3.12", "3.13"]
         include:
+          - os: ubuntu-24.04
+            python-version: "3.12"
+            versions: "3.11 3.12 3.13"
           - os: macos-15
             python-version: "3.13"
+            versions: "3.13"
           - os: windows-2022
             python-version: "3.13"
+            versions: "3.13"
 
     steps:
       - name: Checkout code
@@ -100,19 +83,29 @@ jobs:
           cache-suffix: "${{ matrix.os }}-${{ matrix.python-version }}"
           python-version: ${{ matrix.python-version }}
 
-      - name: Sync workspace
-        run: uv sync --all-extras --dev --frozen
-
-      - name: Run test suite with coverage
-        if: matrix.os == 'ubuntu-24.04' && matrix.python-version == '3.12'
-        run: uv run --frozen pytest --cov --cov-report=term-missing --cov-report=xml
-
-      - name: Run test suite (other platforms and Python versions)
-        if: matrix.os != 'ubuntu-24.04' || matrix.python-version != '3.12'
-        run: uv run --frozen pytest
+      - name: Test every supported Python version
+        shell: bash
+        env:
+          PYTHON_VERSIONS: ${{ matrix.versions }}
+        run: |
+          set -euo pipefail
+          failed=0
+          for version in $PYTHON_VERSIONS; do
+            export UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/sentinella-python-$version"
+            if ! uv sync --all-extras --dev --frozen --python "$version"; then
+              failed=1
+              continue
+            fi
+            if [[ "$RUNNER_OS" == Linux && "$version" == 3.12 ]]; then
+              uv run --frozen --python "$version" pytest --cov --cov-report=term-missing --cov-report=xml --durations=15 || failed=1
+            else
+              uv run --frozen --python "$version" pytest --durations=15 || failed=1
+            fi
+          done
+          exit "$failed"
 
       - name: Upload coverage artifact
-        if: matrix.os == 'ubuntu-24.04' && matrix.python-version == '3.12'
+        if: ${{ always() && matrix.os == 'ubuntu-24.04' && hashFiles('coverage.xml') != '' }}
         uses: actions/upload-artifact@v7
         with:
           name: coverage-xml
@@ -148,3 +141,37 @@ jobs:
 
       - name: Run vitest with coverage
         run: pnpm test:coverage
+
+  package:
+    name: Build and validate Python distributions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v8.1.0
+        with:
+          python-version: "3.13"
+          enable-cache: true
+      - name: Build sdist and wheel from sdist
+        run: uv build --out-dir dist
+      - name: Validate distribution metadata
+        run: uvx --from twine twine check --strict dist/*.whl dist/*.tar.gz
+      - name: Install wheel and sdist independently
+        shell: bash
+        run: |
+          set -euo pipefail
+          for package in "$GITHUB_WORKSPACE"/dist/*.whl "$GITHUB_WORKSPACE"/dist/*.tar.gz; do
+            smoke_dir=$(mktemp -d)
+            uv venv "$smoke_dir/venv" --python 3.13
+            uv pip install --python "$smoke_dir/venv/bin/python" "$package"
+          done
+      - name: Generate checksums
+        run: (cd dist && sha256sum *.whl *.tar.gz > SHA256SUMS)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist-packages
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7

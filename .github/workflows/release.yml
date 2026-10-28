@@ -50,39 +50,8 @@ jobs:
     needs: validate
     uses: ./.github/workflows/ci.yml
 
-  build:
-    needs: checks
-    timeout-minutes: 15
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
-        with:
-          enable-cache: true
-          python-version: "3.13"
-
-      - name: Build packages
-        run: uv build --out-dir dist
-
-      - name: Generate Checksums
-        run: |
-          cd dist
-          sha256sum *.tar.gz *.whl > SHA256SUMS
-
-      - name: Upload release artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: dist-packages
-          path: dist/
-          if-no-files-found: error
-          retention-days: 7
-
   github-release:
-    needs: build
+    needs: checks
     timeout-minutes: 10
     runs-on: ubuntu-24.04
     permissions:

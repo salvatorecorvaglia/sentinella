@@ -10,7 +10,7 @@
 
 ---
 
-## ✨ Features
+## Features ✨
 
 - 🖥 **Interactive TUI Dashboard**: A beautiful terminal dashboard powered by [Textual](https://github.com/Textualize/textual). Inspect CPU, memory, disk, network, active processes, users, sensors, and containers. Supports instant runtime theme toggling (`t` key: dark/light), dynamic process re-sorting (`p` key), force refresh (`r` key), and clear visual stale-state indicators during collection hiccups.
 - 🌐 **Modern Web Dashboard**: A real-time browser interface powered by FastAPI and WebSockets via a high-performance, capped `BroadcastHub`. Features 100% offline/air-gapped vendorized assets, persistent light/dark themes, dynamic thresholds and process ranking matching agent config, snapshot payload wire trimming (~70% payload reduction), an accessible (ARIA, keyboard focus-trapped) authentication modal (the key is kept for the session only unless you choose to remember it; stored keys are obfuscated, not encrypted), and reconnection backoff with manual retry.
@@ -22,7 +22,7 @@
 
 ---
 
-## 🚀 Quick Start
+## Quick Start 🚀
 
 ### Prerequisites
 
@@ -155,22 +155,22 @@ sort_by = "cpu"             # Sort criteria: "cpu", "memory", "pid", "name"
 
 ---
 
-## 🤝 Contributing
+## Contributing 🤝
 
 Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
-## 📜 Changelog
+## Changelog 📜
 
 Detailed release history and version changes can be found in [CHANGELOG.md](CHANGELOG.md).
 
-## 🔐 Security
+## Security 🔐
 
 If you discover a security vulnerability, please see our [Security Policy](SECURITY.md).
 
-## 📝 License
+## License 📝
 
 Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
 
----
+## Author ✍️
 
-**Author**: [Salvatore Corvaglia](https://github.com/salvatorecorvaglia)
+[Salvatore Corvaglia](https://github.com/salvatorecorvaglia)

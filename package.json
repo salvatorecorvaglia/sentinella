@@ -14,7 +14,7 @@
         "format": "biome format --write ."
     },
     "devDependencies": {
-        "@biomejs/biome": "^2.6.7",
+        "@biomejs/biome": "^2.6.8",
         "@vitest/coverage-v8": "^5.1.0",
         "jsdom": "^31.0.1",
         "vitest": "^5.1.0"

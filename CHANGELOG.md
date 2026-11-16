@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Raise the FastAPI minimum version to `0.162.7` and refresh the Python lockfile.
+- Update Python development tooling to pytest `9.2.0`, pytest-asyncio `1.5.0`, Ruff `0.17.5`, and mypy `2.4.1`.
+- Upgrade dashboard tooling to pnpm `12.16.1`, Biome `2.6.8`, Vitest and V8 coverage `5.1.0`, and jsdom `31.0.1`; refresh dependency overrides and the lockfile.
+- Remove the forced Node.js 24 override from CI and release workflows.
+
+### Fixed
+
+- Keep the dashboard text-injection regression test compatible with existing page images while verifying that host-supplied text creates no new image elements.
+
 ## [1.2.0] - 2026-10-28
 
 ### Added

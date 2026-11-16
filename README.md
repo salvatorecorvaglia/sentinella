@@ -2,7 +2,7 @@
   <img src="resources/sentinella.svg" alt="Sentinella logo" width="96" height="96">
 </p>
 
-# Sentinella 🔔
+# Sentinella
 
 **System monitoring with terminal and web dashboards**
 

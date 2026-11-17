@@ -1,0 +1,8 @@
+{
+  "name": "sentinella",
+  "kind": "python",
+  "description": "System monitoring with terminal and web dashboards",
+  "title": "Sentinella",
+  "wheel": "sentinella_monitor",
+  "test": "--help"
+}

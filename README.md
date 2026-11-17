@@ -10,6 +10,14 @@
 
 ---
 
+## Homebrew
+
+Stable releases are distributed through the personal tap:
+
+```sh
+brew install salvatorecorvaglia/tap/sentinella
+```
+
 ## Features ✨
 
 - 🖥 **Interactive TUI Dashboard**: A beautiful terminal dashboard powered by [Textual](https://github.com/Textualize/textual). Inspect CPU, memory, disk, network, active processes, users, sensors, and containers. Supports instant runtime theme toggling (`t` key: dark/light), dynamic process re-sorting (`p` key), force refresh (`r` key), and clear visual stale-state indicators during collection hiccups.

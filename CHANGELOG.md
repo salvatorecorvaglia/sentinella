@@ -9,11 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.3.0] - 2026-11-17
 
-### Added
-
-- Add stable-release Homebrew formula generation with SHA-256 checksums, CI validation, release attachments, and optional publication to the personal tap; document installation and release maintenance.
-- Build and test offline Python 3.13 dependency bundles for Homebrew on macOS and Linux, targeting ARM64 and x86-64.
-
 ### Changed
 
 - Raise the FastAPI minimum version to `0.162.7` and refresh the Python lockfile.

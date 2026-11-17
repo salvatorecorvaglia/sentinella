@@ -6,8 +6,6 @@ on:
   pull_request:
     branches: [ main ]
 
-  # macOS runners queue far longer than Linux/Windows and their arm64 capacity
-  # is intermittent, so macOS coverage also runs unattended every night.
   schedule:
     - cron: "17 3 * * *"
 
@@ -112,11 +110,6 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  # macOS jobs wait minutes in GitHub's hosted-runner queue (arm64 capacity is
-  # intermittent and unassignable jobs are dropped after ~15 minutes), which used
-  # to leave every push to main hanging on this single job. Keep macOS off the
-  # push path: PRs, releases (workflow_call), manual runs and the nightly schedule
-  # still cover it.
   test-macos:
     name: Test (macOS arm64 - Python 3.13)
     timeout-minutes: 20

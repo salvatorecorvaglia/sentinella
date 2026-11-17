@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+  # macOS runners queue far longer than Linux/Windows and their arm64 capacity
+  # is intermittent, so macOS coverage also runs unattended every night.
+  schedule:
+    - cron: "17 3 * * *"
+
   workflow_call:
   workflow_dispatch:
 
@@ -60,9 +65,6 @@ jobs:
           - os: ubuntu-24.04
             python-version: "3.12"
             versions: "3.11 3.12 3.13"
-          - os: macos-15
-            python-version: "3.13"
-            versions: "3.13"
           - os: windows-2022
             python-version: "3.13"
             versions: "3.13"
@@ -109,6 +111,35 @@ jobs:
           path: coverage.xml
           if-no-files-found: error
           retention-days: 7
+
+  # macOS jobs wait minutes in GitHub's hosted-runner queue (arm64 capacity is
+  # intermittent and unassignable jobs are dropped after ~15 minutes), which used
+  # to leave every push to main hanging on this single job. Keep macOS off the
+  # push path: PRs, releases (workflow_call), manual runs and the nightly schedule
+  # still cover it.
+  test-macos:
+    name: Test (macOS arm64 - Python 3.13)
+    timeout-minutes: 20
+    if: ${{ github.event_name != 'push' }}
+    runs-on: macos-15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          enable-cache: true
+          cache-suffix: "macos-15-python-3.13"
+          python-version: "3.13"
+
+      - name: Run test suite
+        run: |
+          set -euo pipefail
+          uv sync --all-extras --dev --frozen --python 3.13
+          uv run --frozen --python 3.13 pytest --durations=15
 
   web-test:
     name: Web dashboard tests

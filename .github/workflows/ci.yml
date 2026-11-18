@@ -10,6 +10,11 @@ on:
     - cron: "17 3 * * *"
 
   workflow_call:
+    inputs:
+      release:
+        description: Skip checks that depend on external vulnerability data
+        type: boolean
+        default: false
   workflow_dispatch:
 
 concurrency:
@@ -50,6 +55,7 @@ jobs:
         run: uv run --frozen mypy
 
       - name: Audit dependencies for known vulnerabilities
+        if: ${{ !inputs.release }}
         run: uv export --frozen --format requirements-txt --no-emit-project --all-extras --dev | uv run --frozen --with pip-audit pip-audit --strict -r /dev/stdin
 
   test:

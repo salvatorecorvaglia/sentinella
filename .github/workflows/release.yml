@@ -46,6 +46,8 @@ jobs:
   checks:
     needs: validate
     uses: ./.github/workflows/ci.yml
+    with:
+      release: true
 
   github-release:
     needs: checks

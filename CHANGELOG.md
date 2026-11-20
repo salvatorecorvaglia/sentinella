@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-20
+
 ### Changed
 
 - Raise the FastAPI minimum version to `0.164.0` and refresh the Python lockfile.
